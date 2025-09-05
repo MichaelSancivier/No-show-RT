@@ -199,8 +199,8 @@ CATALOGO = [
         "acao": "Cancelar agendamento",
         "quando_usar": "Quando o veículo está presente mas não foi possível atender (mecânico, elétrico ou condição do veículo). Em móvel, incluir fatores externos.",
         "exemplos": [
-            "1) Cliente compareceu com veículo, mas houve falha elétrica.",
-            "2) Local sem condição para atendimento (chuva, etc.)."
+            "1) O cliente trouxe o veículo, ele compareceu para atendimento, mas o veículo apresentou falhas elétrica",
+            "2) O local para atendimento não possuía cobertura para atendimento. (chuva, etc.)."
         ],
         "campos": campos("Descreber o Problema"),
         "mascaras": [{

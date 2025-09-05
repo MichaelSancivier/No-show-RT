@@ -8,132 +8,148 @@ st.set_page_config(page_title="Classificação No-show", layout="wide")
 st.title("Classificação No-show")
 
 # =========================================================
-# Helpers
+# Catálogo EMBUTIDO (amplie à vontade)
+# - placeholders dentro das máscaras devem bater com os "name" dos campos
 # =========================================================
-def canon(s: str) -> str:
-    return re.sub(r"\s+", " ", str(s or "")).strip().lower()
-
-def slug(s: str) -> str:
-    s = re.sub(r"[^0-9a-zA-Z_ ]+", "", str(s or ""))
-    s = re.sub(r"\s+", "_", s.strip())
-    return s.lower()
-
-def read_catalog_from_excel_like_yours(file) -> list[dict]:
-    """
-    Lê o layout do seu Excel (3 tabelas lado a lado) na Planilha1:
-      [0..10]  -> Tabela 1: Motivos/Quando/Exemplos/Texto mascara/dado1..dado7 (header na linha 1)
-      [13..15] -> Tabela 2: #/Motivos/Ação sistêmica (header na linha 1)
-      [18..19] -> Tabela 3: Campo/exemplo (header na linha 1)
-    Retorna lista de motivos no formato do app.
-    """
-    df = pd.read_excel(file, sheet_name="Planilha1", engine="openpyxl")
-
-    # --- Tabela 1
-    hdr_row = 1  # cabeçalho na linha 1 (0-base = 1)
-    tbl1 = df.iloc[hdr_row+1:, 0:11].copy()
-    tbl1.columns = ["Motivos","Quando usar","Exemplos","Texto mascara","dado1","dado2","dado3","dado4","dado5","dado6","dado7"]
-    tbl1 = tbl1.dropna(how="all")
-
-    # --- Tabela 2
-    tbl2 = df.iloc[hdr_row:, 13:16].copy()
-    tbl2.columns = ["#","Motivos","Ação sistêmica"]
-    tbl2 = tbl2.iloc[1:]  # remove linha de rótulo '#'
-    acao_map = {}
-    for _, r in tbl2.iterrows():
-        mot = str(r["Motivos"]).strip()
-        acao_map[mot] = str(r["Ação sistêmica"] or "").strip()
-
-    # --- Tabela 3
-    tbl3 = df.iloc[hdr_row:, 18:20].copy()
-    tbl3.columns = ["Campo","exemplo"]
-    tbl3 = tbl3.iloc[1:]  # remove linha de header
-    placeholder_map = {canon(r["Campo"]): str(r["exemplo"] or "").strip() for _, r in tbl3.iterrows() if str(r["Campo"]).strip()}
-
-    # --- Monta catálogo
-    motivos = []
-    for _, r in tbl1.iterrows():
-        titulo = str(r["Motivos"]).strip()
-        if not titulo:
-            continue
-
-        quando = str(r["Quando usar"] or "").strip()
-        exemplos_txt = str(r["Exemplos"] or "").replace("\r","\n")
-        exemplos = [p.strip() for p in re.split(r"\n|;|\|\|", exemplos_txt) if p.strip()]
-
-        # Campos: dado1..dado7
-        campos = []
-        for col in ["dado1","dado2","dado3","dado4","dado5","dado6","dado7"]:
-            val = str(r[col]).strip() if not pd.isna(r[col]) else ""
-            if not val:
-                continue
-            name = slug(val)            # nome técnico
-            label = val                 # rótulo como vem da planilha
-            ph = placeholder_map.get(canon(val), "")
-            campos.append({"name": name, "label": label, "placeholder": ph, "required": True})
-
-        texto_mascara = str(r["Texto mascara"] or "").strip()
-
-        # Ação sistêmica
-        acao = acao_map.get(titulo, "Cancelar agendamento")
-
-        motivo_dict = {
-            "id": slug(titulo),
-            "titulo": titulo,
-            "acao": acao,
-            "quando_usar": quando,
-            "exemplos": exemplos,
-            "campos": campos,
-        }
-
-        # --- Regra especial: duas alternativas para Cronograma de Instalação/Substituição de Placa
-        if "cronograma de instalação/substituição de placa" in canon(titulo):
-            alternativas = []
-            if texto_mascara:
-                alternativas.append(texto_mascara)
-            # segunda alternativa vinda da sua documentação
-            alternativas.append("Operação especial, não foi atendido veículo como substituição.")
-            motivo_dict["mascara_opcoes"] = alternativas
-        else:
-            motivo_dict["mascara_opcoes"] = [texto_mascara] if texto_mascara else [""]
-
-        motivos.append(motivo_dict)
-
-    return motivos
+CATALOGO = [
+    {
+        "id": "cronograma_substituicao_placa",
+        "titulo": "Cronograma de Instalação/Substituição de Placa",
+        "acao": "Cancelar agendamento",
+        "quando_usar": (
+            "Quando o atendimento faz parte de um cronograma especial pré-acordado com o cliente "
+            "e a execução segue o planejamento acordado ou como operação especial. A substituição "
+            "só poderá ser feita para o mesmo serviço."
+        ),
+        "exemplos": [
+            "1) Cliente substituiu por essa OS {os_relacionada}.",
+            "2) Operação especial, não foi atendido veículo como substituição."
+        ],
+        # Campos que SEMPRE aparecem. A obrigatoriedade pode mudar conforme a alternativa.
+        "campos": [
+            {"name": "os_relacionada", "label": "Número OS (quando houver OS de substituição)", "placeholder": "462270287", "required": False},
+            {"name": "complemento", "label": "Complemento (opcional)", "placeholder": "Observações", "required": False},
+        ],
+        # DUAS ALTERNATIVAS de máscara – o usuário escolhe abaixo
+        "mascaras": [
+            {
+                "id": "substituicao_por_os",
+                "rotulo": "Substituição por outra OS",
+                "descricao": "Quando existe uma OS relacionada para a substituição.",
+                "regras_obrig": ["os_relacionada"],  # estes campos tornam-se obrigatórios nesta alternativa
+                "template": "Realizado atendimento com substituição de placa. Alteração feita pela OS {os_relacionada}."
+            },
+            {
+                "id": "operacao_especial",
+                "rotulo": "Operação especial (sem OS de substituição)",
+                "descricao": "Quando é operação especial sem atendimento do veículo como substituição.",
+                "regras_obrig": [],  # nenhum campo passa a ser obrigatório nesta alternativa
+                "template": "Operação especial, não foi atendido veículo como substituição."
+            }
+        ]
+    },
+    {
+        "id": "erro_cliente_desconhecia",
+        "titulo": "Erro de Agendamento – Cliente desconhecia",
+        "acao": "Cancelar agendamento",
+        "quando_usar": "Cliente afirma não ter ciência do agendamento quando contatado.",
+        "exemplos": [
+            "Em contato com o cliente o mesmo informou que desconhecia o agendamento."
+        ],
+        "campos": [
+            {"name": "nome", "label": "Nome do cliente", "placeholder": "João Silva", "required": True},
+            {"name": "data_contato", "label": "Data do contato (DD/MM/AAAA)", "placeholder": "15/05/2025", "required": True},
+            {"name": "hora_contato", "label": "Hora do contato (HHhMM)", "placeholder": "13h25", "required": True},
+        ],
+        "mascaras": [
+            {
+                "id": "padrao",
+                "rotulo": "Padrão",
+                "descricao": "",
+                "regras_obrig": [],
+                "template": "Em contato com o cliente o mesmo informou que desconhecia o agendamento. Nome: {nome} / Data contato: {data_contato} - {hora_contato}"
+            }
+        ]
+    },
+    {
+        "id": "pedido_cliente",
+        "titulo": "Cancelada a Pedido do Cliente",
+        "acao": "Cancelar agendamento",
+        "quando_usar": "Cliente indisponível e solicita cancelamento/reagendamento.",
+        "exemplos": [
+            "Cliente {nome} , contato via {canal} em {data} - {hora}, informou indisponibilidade."
+        ],
+        "campos": [
+            {"name": "nome", "label": "Nome do cliente", "placeholder": "Michael Sancivier", "required": True},
+            {"name": "canal", "label": "Canal", "placeholder": "Voz/Whatsapp/e-mail", "required": True},
+            {"name": "data", "label": "Data (DD/MM/AAAA)", "placeholder": "15/05/2025", "required": True},
+            {"name": "hora", "label": "Hora (HHhMM)", "placeholder": "13h25", "required": True},
+        ],
+        "mascaras": [
+            {
+                "id": "padrao",
+                "rotulo": "Padrão",
+                "descricao": "",
+                "regras_obrig": [],
+                "template": "Cliente {nome} , contato via {canal} em {data} - {hora}, informou indisponibilidade para o atendimento."
+            }
+        ]
+    },
+    {
+        "id": "improdutivo_ponto_fixo",
+        "titulo": "Atendimento Improdutivo – Ponto Fixo",
+        "acao": "Cancelar agendamento",
+        "quando_usar": "Veículo compareceu, mas não foi possível realizar o serviço por motivo informado.",
+        "exemplos": [
+            "Veículo compareceu para atendimento, porém por {motivo}, não foi possível realizar o serviço."
+        ],
+        "campos": [
+            {"name": "motivo", "label": "Motivo da improdutividade", "placeholder": "falha elétrica", "required": True},
+        ],
+        "mascaras": [
+            {
+                "id": "padrao",
+                "rotulo": "Padrão",
+                "descricao": "",
+                "regras_obrig": [],
+                "template": "Veículo compareceu para atendimento, porém por {motivo}, não foi possível realizar o serviço."
+            }
+        ]
+    },
+]
 
 # =========================================================
 # Estado
 # =========================================================
-if "CATALOGO" not in st.session_state:
-    st.session_state.CATALOGO = None
 if "LINHAS" not in st.session_state:
     st.session_state.LINHAS = []
+if "reset_token" not in st.session_state:
+    st.session_state.reset_token = 0  # usado para forçar limpeza dos inputs
+
+def limpar_tudo():
+    """Zera todos os inputs e resultados para nova consulta."""
+    st.session_state.LINHAS = []
+    st.session_state.reset_token += 1
+    # remove chaves de campos dinamicamente
+    for k in list(st.session_state.keys()):
+        if k.startswith("inp_") or k.startswith("alt_") or k.startswith("motivo_sel"):
+            del st.session_state[k]
 
 # =========================================================
-# Upload do Catálogo (Excel)
+# UI
 # =========================================================
-st.markdown("### Carregar catálogo (Excel da documentação)")
-up = st.file_uploader("Selecione o Excel (.xlsx) com as 3 tabelas (como o que você enviou)", type=["xlsx"])
+st.markdown("**Ferramenta para identificar como classificar No-show.**")
 
-if up and st.button("Processar catálogo"):
-    try:
-        st.session_state.CATALOGO = read_catalog_from_excel_like_yours(up)
-        st.success(f"Catálogo carregado: {len(st.session_state.CATALOGO)} motivo(s).")
-    except Exception as e:
-        st.error(f"Falha ao processar catálogo: {e}")
-
-if not st.session_state.CATALOGO:
-    st.info("Envie o Excel e clique em **Processar catálogo** para começar.")
-    st.stop()
-
-CAT = st.session_state.CATALOGO
-motivos_map = {m["titulo"]: m for m in CAT}
-
-# =========================================================
-# UI principal
-# =========================================================
-st.markdown("---")
+# 1) Seleção de motivo
 st.markdown("1) **Motivos – selecionar um aqui:**")
-motivo_titulo = st.selectbox("Motivo", list(motivos_map.keys()), index=0, label_visibility="collapsed")
+motivos_map = {m["titulo"]: m for m in CATALOGO}
+motivo_titulo = st.selectbox(
+    "Motivo",
+    list(motivos_map.keys()),
+    index=0,
+    key=f"motivo_sel_{st.session_state.reset_token}",
+    label_visibility="collapsed"
+)
 motivo = motivos_map[motivo_titulo]
 
 st.markdown("2) **Preencher as informações solicitadas.**")
@@ -143,65 +159,82 @@ with col_esq:
     st.subheader("Dados")
     valores = {}
     erros = []
+
+    # se houver alternativas de máscara, mostre seletor
+    alt_labels = [a["rotulo"] for a in motivo["mascaras"]]
+    alt_idx = 0
+    if len(motivo["mascaras"]) > 1:
+        alt_idx = st.radio(
+            "Versão da máscara",
+            options=list(range(len(alt_labels))),
+            format_func=lambda i: alt_labels[i],
+            key=f"alt_{motivo['id']}_{st.session_state.reset_token}",
+            horizontal=True
+        )
+    alternativa = motivo["mascaras"][alt_idx]
+    obrig_extra = set(alternativa.get("regras_obrig", []))
+
+    # campos variam só na obrigatoriedade adicional por alternativa
     for campo in motivo["campos"]:
-        key = campo["name"]
-        lbl = campo["label"]
-        ph  = campo.get("placeholder","")
-        req = bool(campo.get("required", True))
-        val = st.text_input(lbl, value="", placeholder=ph, key=f"{motivo['id']}_{key}")
-        valores[key] = val.strip()
-        if req and not valores[key]:
-            erros.append(f"Preencha o campo obrigatório: **{lbl}**")
+        name = campo["name"]
+        label = campo["label"]
+        ph = campo.get("placeholder", "")
+        req_base = bool(campo.get("required", False))
+        req = req_base or (name in obrig_extra)
 
-    # Se houver mais de uma máscara, deixar o usuário escolher
-    opcoes = motivo.get("mascara_opcoes", [""])
-    versao_label = None
-    if len(opcoes) > 1:
-        versao_label = st.selectbox("Versão da máscara", [f"Alternativa {i+1}" for i in range(len(opcoes))])
-        idx = int(versao_label.split()[-1]) - 1
-        mascara_template = opcoes[idx]
-    else:
-        mascara_template = opcoes[0]
+        val = st.text_input(
+            label,
+            value="",
+            placeholder=ph,
+            key=f"inp_{motivo['id']}_{name}_{st.session_state.reset_token}"
+        ).strip()
+        valores[name] = val
+        if req and not val:
+            erros.append(f"Preencha o campo obrigatório: **{label}**")
 
-    # Tenta preencher placeholders por nome do campo (substituição básica)
-    mascara_final = mascara_template
+    # gera máscara substituindo placeholders
+    template = alternativa.get("template", "")
+    mascara = template
+    # substitui {nome} por valor; se algum placeholder não tiver valor, mantém sem quebrar
     for c in motivo["campos"]:
-        placeholder = "{" + c["name"] + "}"
-        if placeholder in mascara_final:
-            mascara_final = mascara_final.replace(placeholder, valores.get(c["name"], ""))
+        mascara = mascara.replace("{" + c["name"] + "}", valores.get(c["name"], ""))
+
+    # anexa complemento ao final se existir
+    if "complemento" in valores and valores["complemento"]:
+        mascara = mascara.rstrip(". ") + ". " + valores["complemento"]
 
     st.markdown("3) **Texto padrão (Máscara) para incluir na Ordem de Serviço.**")
-    st.text_area("Máscara gerada", value=mascara_final, height=110, label_visibility="collapsed")
+    st.text_area(
+        "Máscara gerada",
+        value=mascara,
+        height=110,
+        key=f"mask_view_{st.session_state.reset_token}",
+        label_visibility="collapsed"
+    )
 
-    c1, c2, c3 = st.columns(3)
+    c1, c2, c3, c4 = st.columns(4)
     add = c1.button("Adicionar à tabela")
-    clear = c2.button("Limpar campos")
-    exp = c3.button("Baixar Excel")
+    baixar = c2.button("Baixar Excel")
+    limpar = c4.button("🧹 Nova consulta (limpar tudo)", type="secondary")
 
     if add:
         if erros:
             for e in erros:
                 st.warning(e)
         else:
-            linha = {
+            registro = {
                 "Motivo": motivo["titulo"],
-                "Ação sistêmica": motivo.get("acao",""),
-                "Quando usar": motivo.get("quando_usar",""),
-                "Máscara": mascara_final,
+                "Versão máscara": alternativa["rotulo"],
+                "Ação sistêmica": motivo.get("acao", ""),
+                "Quando usar": motivo.get("quando_usar", ""),
+                "Máscara": mascara,
             }
             for c in motivo["campos"]:
-                linha[c["label"]] = valores.get(c["name"], "")
-            # registra qual alternativa foi usada (se aplicável)
-            if versao_label:
-                linha["Versão máscara"] = versao_label
-            st.session_state.LINHAS.append(linha)
+                registro[c["label"]] = valores.get(c["name"], "")
+            st.session_state.LINHAS.append(registro)
             st.success("Linha adicionada.")
 
-    if clear:
-        for c in motivo["campos"]:
-            st.session_state[f"{motivo['id']}_{c['name']}"] = ""
-
-    if exp:
+    if baixar:
         df = pd.DataFrame(st.session_state.LINHAS) if st.session_state.LINHAS else pd.DataFrame()
         if df.empty:
             st.info("Nada para exportar ainda.")
@@ -216,17 +249,21 @@ with col_esq:
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
 
+    if limpar:
+        limpar_tudo()
+        st.experimental_rerun()
+
 with col_dir:
     st.subheader("O que fazer?")
-    st.info(motivo.get("acao",""))
+    st.info(motivo.get("acao", ""))
     st.subheader("Quando usar?")
-    st.info(motivo.get("quando_usar",""))
+    st.info(motivo.get("quando_usar", ""))
     st.subheader("Exemplos")
-    exs = motivo.get("exemplos", []) or []
-    if not exs:
+    if motivo.get("exemplos"):
+        for ex in motivo["exemplos"]:
+            st.success(ex)
+    else:
         st.caption("Sem exemplos cadastrados.")
-    for ex in exs:
-        st.success(ex)
 
 st.markdown("---")
 st.subheader("Prévia da tabela")

@@ -283,7 +283,7 @@ CATALOGO = [
         "id": "erro_cliente_desconhecia",
         "titulo": "Erro De Agendamento - Cliente desconhecia o agendamento",
         "acao": "Cancelar agendamento",
-        "quando_usar": "OS agendada sem o cliente saber previamente.",
+        "quando_usar": "OS foi agendada sem que o cliente tivesse sido informado previamente, resultando em ausência ou recusa no momento do atendimento técnico. Obrigatório informar: Nome do cliente que entrou em contato, horário do cancelamento e canal de contato (preferencialmente canal que seja possível a futura comprovação).",
         "exemplos": [
             "1) Técnico chegou e o cliente disse não ter solicitado nenhum serviço ou foi entrado em contato com o cliente e o mesmo informou que desconhecia o agendamento.​",
             "2) Realizamos contato com o cliente ele informou que desconhecia o agendamento."

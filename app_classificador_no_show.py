@@ -493,8 +493,7 @@ CATALOGO = [
         "id": "oc_tecnico_impossivel",
         "titulo": "Ocorrência com Técnico – Não foi possível realizar atendimento",
         "acao": "Cancelar agendamento",
-        "quando_usar": "Quando o técnico não consegue realizar o atendimento por questões pessoais ou operacionais, como: Problemas de saúde e pessoais; Problemas no veículo do técnico ou acidentes, ou outras impossibilidades de comparecer ao local. 
-Deve ser informar horário, nome do cliente e canal de contato (voz, e-mail, whatsapp) que foi informado o cliente sobre a impossibilidade de atendimento.",
+        "quando_usar": "Quando o técnico não consegue realizar o atendimento por questões pessoais ou operacionais, como: Problemas de saúde e pessoais; Problemas no veículo do técnico ou acidentes, ou outras impossibilidades de comparecer ao local. Deve ser informar horário, nome do cliente e canal de contato (voz, e-mail, whatsapp) que foi informado o cliente sobre a impossibilidade de atendimento.",
         "exemplos": ["Técnico não se sentiu bem e teve que se ausentar na tarde de hoje."],
         "campos": campos("Descreber o Problema", "Nome"),
         "mascaras": [{

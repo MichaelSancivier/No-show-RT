@@ -51,17 +51,39 @@ def slug(s: str) -> str:
 def normalize_token(token: str) -> str:
     """
     Normaliza os [TOKENS] do catálogo para chaves de campos.
-    Faz o mapeamento de sinônimos e ortografias diferentes.
+    Suporta sufixos numéricos: [DATA 2], [HORA 3], [DATA/HORA 2], etc.
     """
     t = slug(token)
 
-    # ---- Regras especiais amplas para "descrever/descrição do problema"
-    # Qualquer token que contenha "descr" e "problem" vira a chave usada no formulário
+    # Descrever problema (qualquer variação vira a mesma chave)
     if ("descr" in t) and ("problem" in t):
-        # nosso campo padrão (mesmo que esteja escrito "Descreber o Problema")
         return "descreber_o_problema"
 
-    # Mapeamentos diretos de sinônimos comuns
+    # DATA/HORA com sufixo (data_hora, data_hora_2, data_hora_3, ...)
+    m = re.match(r"^data_hora(?:_(\d+))?$", t)
+    if m:
+        n = m.group(1)
+        if not n or n == "1":
+            return "__DATAHORA__"
+        if n == "2":
+            return "__DATAHORA2__"
+        if n == "3":
+            return "__DATAHORA3__"
+        return f"__DATAHORA{n}__"
+
+    # DATA (só data) com sufixo
+    m = re.match(r"^data(?:_(\d+))?$", t)
+    if m:
+        n = m.group(1)
+        return f"data_{n}" if n and n != "1" else "data"
+
+    # HORA (só hora) com sufixo
+    m = re.match(r"^hora(?:_(\d+))?$", t)
+    if m:
+        n = m.group(1)
+        return f"hora_{n}" if n and n != "1" else "hora"
+
+    # Mapeamentos diretos / sinônimos
     mapping = {
         # nomes
         "nome": "nome",
@@ -70,12 +92,6 @@ def normalize_token(token: str) -> str:
         "nome_tecnico": "nome_tecnico",
         "tecnico": "nome_tecnico",
 
-        # data/hora
-        "data": "data",
-        "hora": "hora",
-        "data_hora": "__DATAHORA__",
-        "data___hora": "__DATAHORA__",
-
         # canais / papéis
         "canal": "canal",
         "especialista": "especialista",
@@ -83,7 +99,7 @@ def normalize_token(token: str) -> str:
         # numerações
         "numero_ordem_de_servico": "numero_os",
         "numero_os": "numero_os",
-        "numero": "asm",  # no texto de instabilidade, [NÚMERO] refere-se ao nº da ASM
+        "numero": "asm",  # no texto de instabilidade, [NÚMERO] é a ASM
 
         # erro/tipo/explicação
         "tipo": "tipo_erro",
@@ -100,7 +116,7 @@ def normalize_token(token: str) -> str:
         "item": "item",
     }
 
-    # Variações típicas do "descrever/descrição"
+    # Variações de "descrever"
     if t in ("descreva", "descrever", "descrever_problema", "descrever_o_problema",
              "descreva_o_problema", "descricao_do_problema"):
         return "descreber_o_problema"
@@ -110,27 +126,40 @@ def normalize_token(token: str) -> str:
 def build_mask(template: str, values: dict) -> str:
     """
     Substitui [TOKENS] do template pelos valores digitados.
-    [DATA/HORA] é montado a partir de Data + Hora (se existirem).
-    Tokens desconhecidos permanecem entre colchetes.
+    - [DATA/HORA]    -> data + hora (par 1)
+    - [DATA/HORA 2]  -> data_2 + hora_2 (par 2)
+    - [DATA/HORA 3]  -> data_3 + hora_3 (par 3)
+    - [DATA], [DATA 2], [HORA], [HORA 3] etc. também funcionam.
     """
     text = str(template or "")
     tokens = re.findall(r"\[([^\]]+)\]", text)
     for tok in tokens:
         norm = normalize_token(tok)
 
-        if norm == "__DATAHORA__":
-            d = values.get("data", "").strip()
-            h = values.get("hora", "").strip()
+        # DATA/HORA 1..N
+        if norm.startswith("__DATAHORA"):
+            if norm == "__DATAHORA__":
+                d_key, h_key = "data", "hora"
+            elif norm == "__DATAHORA2__":
+                d_key, h_key = "data_2", "hora_2"
+            elif norm == "__DATAHORA3__":
+                d_key, h_key = "data_3", "hora_3"
+            else:
+                n = re.findall(r"__DATAHORA(\d+)__", norm)
+                n = n[0] if n else "1"
+                d_key, h_key = f"data_{n}", f"hora_{n}"
+            d = values.get(d_key, "").strip()
+            h = values.get(h_key, "").strip()
             rep = (f"{d} - {h}" if d and h else (d or h or ""))
             text = text.replace(f"[{tok}]", rep)
             continue
 
-        # tenta por chave normalizada
+        # chave normalizada direta (DATA, DATA 2, HORA, HORA 3, etc.)
         if norm in values and values.get(norm, "") != "":
             text = text.replace(f"[{tok}]", values.get(norm, "").strip())
             continue
 
-        # fallback: tenta por slug literal do token
+        # fallback por slug literal
         s = slug(tok)
         if s in values and values.get(s, "") != "":
             text = text.replace(f"[{tok}]", values.get(s, "").strip())
@@ -138,7 +167,6 @@ def build_mask(template: str, values: dict) -> str:
 
         # se ainda não substituiu, deixa o token como está
 
-    # pequenos ajustes: remover duplos espaços antes de pontos, etc.
     text = re.sub(r"\s+\.", ".", text)
     return text.strip()
 
@@ -168,7 +196,7 @@ def campos(*labels):
     return out
 
 # =========================================================
-# Catálogo de 23 MOTIVOS (idêntico ao aprovado)
+# Catálogo de 23 MOTIVOS (idêntico ao aprovado, com 2 templates ajustados)
 # =========================================================
 CATALOGO = [
     # 1) Alteração do tipo de serviço – De assistência para reinstalação
@@ -231,7 +259,7 @@ CATALOGO = [
         }]
     },
 
-    # 4) Cancelamento a pedido da RT  (MÁSCARA AJUSTADA)
+    # 4) Cancelamento a pedido da RT
     {
         "id": "pedido_rt",
         "titulo": "Cancelamento a pedido da RT",
@@ -351,7 +379,7 @@ CATALOGO = [
         }]
     },
 
-    # 10) Erro de roteirização - Atendimento móvel
+    # 10) Erro de roteirização - Atendimento móvel (template corrigido)
     {
         "id": "erro_roteirizacao_movel",
         "titulo": "Erro de roteirização do agendamento - Atendimento móvel",
@@ -364,7 +392,7 @@ CATALOGO = [
             "rotulo": "Padrão",
             "descricao": "",
             "regras_obrig": [],
-            "template": "Não foi possível concluir o atendimento devido [DESCREVA O PROBLEMA]. Cliente [NOME] às [DATA/HORA] foi informado sobre a necessidade de reagendamento. Especialista [ESPECIALISTA] informado às [DATA/HORA]."
+            "template": "Não foi possível concluir o atendimento devido [DESCREVA O PROBLEMA]. Cliente [NOME] às [DATA/HORA] foi informado sobre a necessidade de reagendamento. Especialista [ESPECIALISTA] informado às [DATA/HORA 2]."
         }]
     },
 
@@ -439,7 +467,7 @@ CATALOGO = [
         }]
     },
 
-    # 15) Instabilidade de Equipamento/Sistema
+    # 15) Instabilidade de Equipamento/Sistema (template com 3 datas)
     {
         "id": "instabilidade_sistema",
         "titulo": "Instabilidade de Equipamento/Sistema",
@@ -452,7 +480,11 @@ CATALOGO = [
             "rotulo": "Padrão",
             "descricao": "",
             "regras_obrig": [],
-            "template": "Atendimento finalizado em [DATA/HORA] não concluído devido à instabilidade de [EQUIPAMENTO/SISTEMA]. Registrado teste/reinstalação em [DATA]. Realizado contato com a central [DATA/HORA] e foi gerada a ASM [NÚMERO]."
+            "template": (
+                "Atendimento finalizado em [DATA/HORA] não concluído devido à instabilidade de "
+                "[EQUIPAMENTO/SISTEMA]. Registrado teste/reinstalação em [DATA 2]. "
+                "Realizado contato com a central [DATA/HORA 3] e foi gerada a ASM [NÚMERO]."
+            )
         }]
     },
 
@@ -637,16 +669,23 @@ with col_esq:
     alternativa = motivo["mascaras"][alt_idx]
     obrig_extra = set(alternativa.get("regras_obrig", []))
 
-    # --------- BLOCO DE INPUTS (com chaves únicas) ----------
+    # --------- BLOCO DE INPUTS (com chaves únicas e numeradas) ----------
     valores = {}
     erros = []
+    counts_by_name = {}      # conta repetições por base-name (data, hora, ...)
+    counts_by_label = {}     # idem para rótulo (para exportar bonito)
 
     for idx, c in enumerate(motivo["campos"]):
-        name = c["name"]
-        label = c["label"]
-        req = bool(c.get("required", False)) or (name in obrig_extra)
+        base_name = c["name"]              # ex.: "data"
+        label = c["label"]                 # ex.: "Data"
+        req = bool(c.get("required", False)) or (base_name in obrig_extra)
 
-        widget_key = f"inp_{motivo['id']}_{idx}_{slug(name)}_{st.session_state.reset_token}"
+        # número da ocorrência para esse base_name (data -> data, data_2, data_3)
+        occ = counts_by_name.get(base_name, 0) + 1
+        counts_by_name[base_name] = occ
+        eff_name = base_name if occ == 1 else f"{base_name}_{occ}"
+
+        widget_key = f"inp_{motivo['id']}_{idx}_{eff_name}_{st.session_state.reset_token}"
 
         val = st.text_input(
             label,
@@ -655,15 +694,11 @@ with col_esq:
             key=widget_key
         ).strip()
 
-        if name in valores:
-            if val:
-                valores[name] = val
-        else:
-            valores[name] = val
+        valores[eff_name] = val
 
-        if req and not valores.get(name, ""):
+        if req and not valores.get(eff_name, ""):
             erros.append(f"Preencha o campo obrigatório: **{label}**")
-    # --------------------------------------------------------
+    # --------------------------------------------------------------------
 
     # máscara gerada
     template = alternativa.get("template", "")
@@ -682,6 +717,7 @@ with col_esq:
             for e in erros:
                 st.warning(e)
         else:
+            # para exportação, gere colunas numeradas quando rótulo se repete
             registro = {
                 "Motivo": motivo["titulo"],
                 "Versão máscara": alternativa["rotulo"],
@@ -689,8 +725,24 @@ with col_esq:
                 "Quando usar": motivo.get("quando_usar", ""),
                 "Máscara": mascara,
             }
-            for c in motivo["campos"]:
-                registro[c["label"]] = valores.get(c["name"], "")
+
+            # reitera nos campos na mesma ordem para montar rótulos Data, Data 2...
+            counts_by_name = {}
+            counts_by_label = {}
+            for idx, c in enumerate(motivo["campos"]):
+                base_name = c["name"]
+                label = c["label"]
+                occ = counts_by_name.get(base_name, 0) + 1
+                counts_by_name[base_name] = occ
+                eff_name = base_name if occ == 1 else f"{base_name}_{occ}"
+
+                # rótulo exportável
+                occ_label = counts_by_label.get(label, 0) + 1
+                counts_by_label[label] = occ_label
+                col_label = label if occ_label == 1 else f"{label} {occ_label}"
+
+                registro[col_label] = valores.get(eff_name, "")
+
             st.session_state.LINHAS.append(registro)
             st.success("Linha adicionada.")
 

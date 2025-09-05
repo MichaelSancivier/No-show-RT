@@ -304,7 +304,7 @@ CATALOGO = [
         "titulo": "Erro de Agendamento – Endereço incorreto",
         "acao": "Cancelar agendamento",
         "quando_usar": "Endereço incorreto/incompleto inviabilizando chegada.",
-        "exemplos": ["Técnico foi para rua X, cliente na rua Y."],
+        "exemplos": ["Técnico direcionado para rua X, mas cliente está na rua Y, inviabilizando o atendimento."],
         "campos": campos("Tipo erro", "Descreva", "Nome", "Data", "Hora"),
         "mascaras": [{
             "id": "padrao",

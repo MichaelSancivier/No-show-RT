@@ -426,10 +426,7 @@ CATALOGO = [
         "titulo": "Falta De Equipamento - Principal",
         "acao": "Cancelar agendamento",
         "quando_usar": "Atendimento foi marcado, mas o técnico não tinha consigo o equipamento principal necessário, mesmo estando previsto para o serviço.",
-        "exemplos": [
-          "1) RT Com falta de equipamento LMU4233.",​ 
-          "2) Aguardando o equipamento RFID."
-        ],
+        "exemplos": ["1) RT Com falta de equipamento LMU4233.​ "2) Aguardando o equipamento RFID."],
         "campos": campos("Item", "Cliente", "Data", "Hora"),
         "mascaras": [{
             "id": "padrao",

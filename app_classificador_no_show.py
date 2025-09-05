@@ -74,7 +74,7 @@ def normalize_token(token: str) -> str:
         "data": "data",
         "hora": "hora",
         "data_hora": "__DATAHORA__",
-        "data___hora": "__DATAHORA__",   # variações que aparecem do slug
+        "data___hora": "__DATAHORA__",
 
         # canais / papéis
         "canal": "canal",
@@ -100,7 +100,7 @@ def normalize_token(token: str) -> str:
         "item": "item",
     }
 
-    # variações típicas do "descrever/descrição" que não caíram no if acima
+    # Variações típicas do "descrever/descrição"
     if t in ("descreva", "descrever", "descrever_problema", "descrever_o_problema",
              "descreva_o_problema", "descricao_do_problema"):
         return "descreber_o_problema"
@@ -168,8 +168,7 @@ def campos(*labels):
     return out
 
 # =========================================================
-# Catálogo de 23 MOTIVOS (regras + campos + máscaras)
-# (idênticos ao que combinamos; ajustes mínimos em pontuação)
+# Catálogo de 23 MOTIVOS (idêntico ao aprovado)
 # =========================================================
 CATALOGO = [
     # 1) Alteração do tipo de serviço – De assistência para reinstalação
@@ -623,8 +622,6 @@ col_esq, col_dir = st.columns([1.05, 1])
 
 with col_esq:
     st.subheader("Dados")
-    valores = {}
-    erros = []
 
     # opções de máscara
     alt_labels = [a["rotulo"] for a in motivo["mascaras"]]
@@ -640,20 +637,33 @@ with col_esq:
     alternativa = motivo["mascaras"][alt_idx]
     obrig_extra = set(alternativa.get("regras_obrig", []))
 
-    # inputs
-    for c in motivo["campos"]:
+    # --------- BLOCO DE INPUTS (com chaves únicas) ----------
+    valores = {}
+    erros = []
+
+    for idx, c in enumerate(motivo["campos"]):
         name = c["name"]
         label = c["label"]
         req = bool(c.get("required", False)) or (name in obrig_extra)
+
+        widget_key = f"inp_{motivo['id']}_{idx}_{slug(name)}_{st.session_state.reset_token}"
+
         val = st.text_input(
             label,
             value="",
             placeholder=c.get("placeholder", ""),
-            key=f"inp_{motivo['id']}_{name}_{st.session_state.reset_token}"
+            key=widget_key
         ).strip()
-        valores[name] = val
-        if req and not val:
+
+        if name in valores:
+            if val:
+                valores[name] = val
+        else:
+            valores[name] = val
+
+        if req and not valores.get(name, ""):
             erros.append(f"Preencha o campo obrigatório: **{label}**")
+    # --------------------------------------------------------
 
     # máscara gerada
     template = alternativa.get("template", "")
@@ -689,15 +699,38 @@ with col_esq:
         if df.empty:
             st.info("Nada para exportar ainda.")
         else:
-            buf = io.BytesIO()
-            with pd.ExcelWriter(buf, engine="openpyxl") as w:
-                df.to_excel(w, index=False, sheet_name="No-show")
-            st.download_button(
-                "Baixar Excel (No-show)",
-                data=buf.getvalue(),
-                file_name=f"no_show_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+            # Fallback esperto: openpyxl -> xlsxwriter -> CSV
+            engine = None
+            try:
+                import openpyxl  # noqa
+                engine = "openpyxl"
+            except Exception:
+                try:
+                    import xlsxwriter  # noqa
+                    engine = "xlsxwriter"
+                except Exception:
+                    engine = None
+
+            if engine:
+                buf = io.BytesIO()
+                with pd.ExcelWriter(buf, engine=engine) as w:
+                    df.to_excel(w, index=False, sheet_name="No-show")
+                st.download_button(
+                    "Baixar Excel (No-show)",
+                    data=buf.getvalue(),
+                    file_name=f"no_show_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+                st.caption(f"Arquivo gerado com engine **{engine}**.")
+            else:
+                csv = df.to_csv(index=False).encode("utf-8-sig")
+                st.download_button(
+                    "Baixar CSV (fallback)",
+                    data=csv,
+                    file_name=f"no_show_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    mime="text/csv"
+                )
+                st.warning("Nenhum engine Excel disponível. Exporte em CSV ou inclua `openpyxl`/`xlsxwriter` no requirements.")
 
     if limpar:
         limpar_tudo()

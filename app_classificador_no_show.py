@@ -285,8 +285,8 @@ CATALOGO = [
         "acao": "Cancelar agendamento",
         "quando_usar": "OS agendada sem o cliente saber previamente.",
         "exemplos": [
-            "1) Técnico chegou e cliente disse não ter solicitado.",
-            "2) Contato com cliente: desconhecia o agendamento."
+            "1) Técnico chegou e o cliente disse não ter solicitado nenhum serviço ou foi entrado em contato com o cliente e o mesmo informou que desconhecia o agendamento.​",
+            "2) Realizamos contato com o cliente ele informou que desconhecia o agendamento."
         ],
         "campos": campos("Nome Cliente", "Data", "Hora"),
         "mascaras": [{

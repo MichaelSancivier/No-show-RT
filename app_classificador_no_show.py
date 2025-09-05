@@ -199,7 +199,7 @@ CATALOGO = [
         "acao": "Cancelar agendamento",
         "quando_usar": "Quando o veículo está presente mas não foi possível atender (mecânico, elétrico ou condição do veículo). Em móvel, incluir fatores externos.",
         "exemplos": [
-            "1) O cliente trouxe o veículo, ele compareceu para atendimento, mas o veículo apresentou falhas elétrica",
+            "1) O cliente trouxe o veículo, ele compareceu para atendimento, mas o veículo apresentou falhas elétrica.",
             "2) O local para atendimento não possuía cobertura para atendimento. (chuva, etc.)."
         ],
         "campos": campos("Descreber o Problema"),
@@ -219,8 +219,8 @@ CATALOGO = [
         "acao": "Cancelar agendamento",
         "quando_usar": "Quando o próprio cliente solicita o cancelamento do atendimento.",
         "exemplos": [
-            "1) Cliente ligou pedindo para remarcar.",
-            "2) Ao confirmar, cliente informou indisponibilidade."
+            "1) Cliente ligou pedindo para remarcar porque o motorista estaria em viagem, ou porque não chegaria a tempo, ou veículo está na oficina.",
+            "2) Entramos em contato com o cliente para confirmar o atendimento ele disse que o veículo estará em viagem ou indisponível."
         ],
         "campos": campos("Nome", "Canal", "Data", "Hora"),
         "mascaras": [{

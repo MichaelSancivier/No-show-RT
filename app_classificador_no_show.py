@@ -303,7 +303,7 @@ CATALOGO = [
         "id": "erro_endereco_incorreto",
         "titulo": "Erro de Agendamento – Endereço incorreto",
         "acao": "Cancelar agendamento",
-        "quando_usar": "Endereço incorreto/incompleto inviabilizando chegada.",
+        "quando_usar": "Endereço informado na OS está incorreto ou incompleto, inviabilizando a chegada ao local para execução do serviço.",
         "exemplos": ["Técnico direcionado para rua X, mas cliente está na rua Y, inviabilizando o atendimento."],
         "campos": campos("Tipo erro", "Descreva", "Nome", "Data", "Hora"),
         "mascaras": [{
@@ -320,7 +320,7 @@ CATALOGO = [
         "id": "erro_falta_info_os",
         "titulo": "Erro de Agendamento – Falta de informações na O.S.",
         "acao": "Cancelar agendamento",
-        "quando_usar": "OS com dados incompletos inviabilizando atendimento.",
+        "quando_usar": "OS criada com informações incompletas, como ausência de dados do cliente, tipo de serviço ou outros campos obrigatórios que inviabilizam o atendimento.",
         "exemplos": ["Não há solução cadastrada no sistema."],
         "campos": campos("Tipo erro", "Explique", "Nome", "Data", "Hora"),
         "mascaras": [{
@@ -337,7 +337,7 @@ CATALOGO = [
         "id": "erro_os_incorreta",
         "titulo": "Erro de Agendamento – O.S. agendada incorretamente (tipo/motivo/produto)",
         "acao": "Cancelar agendamento",
-        "quando_usar": "Categorização incorreta (tipo/serviço/produto), inviabilizando execução.",
+        "quando_usar": "Erro na categorização do serviço ao agendar a OS (ex: tipo de atendimento ou produto incorreto), levando à impossibilidade de execução correta.",
         "exemplos": [
             "1) Cliente pediu assistência e foi agendada instalação por engano.",
             "2) Agendamento no mesmo dia sem autorização."
@@ -357,8 +357,8 @@ CATALOGO = [
         "id": "erro_roteirizacao_movel",
         "titulo": "Erro de roteirização do agendamento - Atendimento móvel",
         "acao": "Cancelar agendamento",
-        "quando_usar": "Falha permitindo agendamento sem considerar deslocamento.",
-        "exemplos": ["Técnico sem tempo hábil; comercial informado."],
+        "quando_usar": "Quando houver uma falha no agendamento, e permite que o cliente consiga fazer agendamento no portal do cliente de um dia para o outro ou no mesmo dia, sem considerar o deslocamento.",
+        "exemplos": ["Deslocamento de retorno não considerado, técnico sem tempo hábil para execução, comercial informado."],
         "campos": campos("Descreber o Problema", "Cliente", "Data", "Hora", "Especialista", "Data", "Hora"),
         "mascaras": [{
             "id": "padrao",
@@ -374,8 +374,8 @@ CATALOGO = [
         "id": "falta_acessorios_imobilizado",
         "titulo": "Falta De Equipamento - Acessórios Imobilizado",
         "acao": "Cancelar agendamento",
-        "quando_usar": "Acessórios imobilizados em outro atendimento.",
-        "exemplos": ["Sem o sensor temperatura NTC 10K; aguardando distribuição."],
+        "quando_usar": "Falta de acessórios que estão alocados (imobilizados) em outro atendimento, impedindo a realização do serviço agendado.",
+        "exemplos": ["Agendamento precisara ser cancelado, pois estamos sem o sensor temperatura NTC 10K , o mesmo foi pedido para a distribuição mas ainda não chegou."],
         "campos": campos("Item", "Cliente", "Data", "Hora"),
         "mascaras": [{
             "id": "padrao",
@@ -391,7 +391,7 @@ CATALOGO = [
         "id": "falta_item_reservado_incompativel",
         "titulo": "Falta De Equipamento - Item Reservado Não Compatível",
         "acao": "Cancelar agendamento",
-        "quando_usar": "Item reservado incompatível com veículo/serviço.",
+        "quando_usar": "Material reservado está incompatível com o veículo ou serviço solicitado, mesmo estando disponível no estoque.",
         "exemplos": ["Instalação não concluída por falta de rastreador compatível."],
         "campos": campos("Item", "Cliente", "Data", "Hora"),
         "mascaras": [{
@@ -408,7 +408,7 @@ CATALOGO = [
         "id": "falta_material",
         "titulo": "Falta De Equipamento - Material",
         "acao": "Cancelar agendamento",
-        "quando_usar": "Ausência total de material necessário.",
+        "quando_usar": "Ausência total de material necessário para a execução da OS, mesmo após verificação de estoque.",
         "exemplos": ["Falta equipamento ADPLUS."],
         "campos": campos("Item", "Cliente", "Data", "Hora"),
         "mascaras": [{
@@ -425,8 +425,8 @@ CATALOGO = [
         "id": "falta_principal",
         "titulo": "Falta De Equipamento - Principal",
         "acao": "Cancelar agendamento",
-        "quando_usar": "Técnico sem o equipamento principal necessário.",
-        "exemplos": ["1) Falta LMU4233. 2) Aguardando RFID."],
+        "quando_usar": "Atendimento foi marcado, mas o técnico não tinha consigo o equipamento principal necessário, mesmo estando previsto para o serviço.",
+        "exemplos": ["1) RT Com falta de equipamento LMU4233.​ 2) Aguardando o equipamento RFID."],
         "campos": campos("Item", "Cliente", "Data", "Hora"),
         "mascaras": [{
             "id": "padrao",
@@ -442,7 +442,7 @@ CATALOGO = [
         "id": "instabilidade_sistema",
         "titulo": "Instabilidade de Equipamento/Sistema",
         "acao": "Contatar a central para conclusão; se não possível, registrar ação com nº da ASM.",
-        "quando_usar": "Problema no sistema/equipamento impediu concluir.",
+        "quando_usar": "Quando deu problema no sistema ou no equipamento e não foi possível terminar o serviço.",
         "exemplos": ["Rastreador não iniciou comunicação com a plataforma."],
         "campos": campos("Data", "Hora", "Equipamento/Sistema", "Data", "Data", "Hora", "ASM"),
         "mascaras": [{
@@ -459,8 +459,8 @@ CATALOGO = [
         "id": "no_show_cliente",
         "titulo": "No-show Cliente – Ponto Fixo/Móvel",
         "acao": "Cancelar agendamento",
-        "quando_usar": "Cliente não aparece no local (fixo) / indisponível no ponto móvel.",
-        "exemplos": ["Veículo em rota; chegou com atraso > 15min."],
+        "quando_usar": "Quando o cliente não aparece no local/empresa (fixo) ou não está disponível no ponto móvel.",
+        "exemplos": ["O técnico chegou ao cliente, mas o caminhão estava em rota de viagem, o veículo não compareceu no ponto de atendimento, o veículo chegou com atraso superior a 15 minutos."],
         "campos": campos("Hora"),
         "mascaras": [{
             "id": "padrao",
@@ -476,7 +476,7 @@ CATALOGO = [
         "id": "no_show_tecnico",
         "titulo": "No-show Técnico",
         "acao": "Cancelar agendamento",
-        "quando_usar": "Técnico não comparece no horário/local.",
+        "quando_usar": "Quando o técnico não comparece no horário/local.",
         "exemplos": ["Técnico não realizou o atendimento."],
         "campos": campos("Nome Técnico", "Data", "Hora", "Motivo"),
         "mascaras": [{
@@ -493,8 +493,9 @@ CATALOGO = [
         "id": "oc_tecnico_impossivel",
         "titulo": "Ocorrência com Técnico – Não foi possível realizar atendimento",
         "acao": "Cancelar agendamento",
-        "quando_usar": "Questões pessoais/operacionais impediram o atendimento.",
-        "exemplos": ["Técnico não se sentiu bem e se ausentou."],
+        "quando_usar": "Quando o técnico não consegue realizar o atendimento por questões pessoais ou operacionais, como: Problemas de saúde e pessoais; Problemas no veículo do técnico ou acidentes, ou outras impossibilidades de comparecer ao local. 
+Deve ser informar horário, nome do cliente e canal de contato (voz, e-mail, whatsapp) que foi informado o cliente sobre a impossibilidade de atendimento.",
+        "exemplos": ["Técnico não se sentiu bem e teve que se ausentar na tarde de hoje."],
         "campos": campos("Descreber o Problema", "Nome"),
         "mascaras": [{
             "id": "padrao",
@@ -510,8 +511,8 @@ CATALOGO = [
         "id": "oc_tecnico_parcial",
         "titulo": "Ocorrência Com Técnico - Sem Tempo Hábil Para Realizar O Serviço (Atendimento Parcial)",
         "acao": "Cancelar agendamento",
-        "quando_usar": "Atendimento iniciado, mas não será possível concluir no dia.",
-        "exemplos": ["Técnico iniciou o serviço e não finalizou no mesmo dia."],
+        "quando_usar": "Quando iniciado o atendimento, porém foi identificado que não será possível concluir o serviço.",
+        "exemplos": ["Técnico começou a realizar o serviço e não conseguiu finalizar o atendimento no mesmo dia."],
         "campos": campos("Descreber o Problema", "Cliente", "Data", "Hora"),
         "mascaras": [{
             "id": "padrao",
@@ -527,8 +528,8 @@ CATALOGO = [
         "id": "oc_tecnico_nao_iniciado",
         "titulo": "Ocorrência Com Técnico - Sem Tempo Hábil Para Realizar O Serviço (Não iniciado)",
         "acao": "Cancelar agendamento",
-        "quando_usar": "Sem tempo suficiente por erro de agendamento/encaixe/atraso; atendimento não iniciado.",
-        "exemplos": ["Atendimento anterior demorou além do previsto e inviabilizou o próximo."],
+        "quando_usar": " Quando não houve tempo suficiente por erro de agendamento, encaixe, atraso em OS anterior ou roteirização ruim e o atendimento não foi iniciado.",
+        "exemplos": [" Atendimento anterior demorou muito mais que o previsto e inviabilizou o próximo."],
         "campos": campos("Motivo", "Cliente"),
         "mascaras": [{
             "id": "padrao",
@@ -544,8 +545,8 @@ CATALOGO = [
         "id": "oc_tecnico_sem_habilidade",
         "titulo": "Ocorrência Com Técnico - Técnico Sem Habilidade Para Realizar Serviço",
         "acao": "Cancelar agendamento",
-        "quando_usar": "RT identifica que o técnico não possui a habilidade necessária.",
-        "exemplos": ["Atendimento roteirizado para técnico sem a skill exigida."],
+        "quando_usar": "Quando o representante técnico identifica que o atendimento não pode ser realizado, devido a falta de habilidade específica do técnico.",
+        "exemplos": ["Atendimento roteirizado na agenda do técnico instalador sem a habilidade necessária para a realização do serviço"],
         "campos": campos("Descreber o Problema", "Cliente"),
         "mascaras": [{
             "id": "padrao",
@@ -561,8 +562,8 @@ CATALOGO = [
         "id": "perda_extravio_defeito",
         "titulo": "Perda/Extravio/Falta Do Equipamento/Equipamento Com Defeito",
         "acao": "Cancelar agendamento",
-        "quando_usar": "Equipamento/acessório não está mais no veículo ou defeito/má condição; cliente recusou termo.",
-        "exemplos": ["Novo proprietário não aceitou assinar o termo de Mau Uso."],
+        "quando_usar": "Quando o técnico identifica que o equipamento/acessório não está mais no veículo ou por falta de condições de mau uso não é possível realizar o atendimento, e o cliente se recusa a assinar o termo de cobrança.",
+        "exemplos": ["Veículo esta no local mas não tem todos os equipamentos, novo proprietário não aceitou assinar o termo de Mau Uso."],
         "campos": campos("Descreber o Problema"),
         "mascaras": [{
             "id": "padrao",
@@ -578,8 +579,8 @@ CATALOGO = [
         "id": "servico_incompativel_os",
         "titulo": "Serviço incompatível com a OS aberta",
         "acao": "Cancelar agendamento",
-        "quando_usar": "Material separado não atende às necessidades para concluir o serviço.",
-        "exemplos": ["Necessidade de outro equipamento que não o descrito."],
+        "quando_usar": "Quando iniciado o atendimento, porém foi identificado que o equipamento/material separado não atende as necessidades para conclusão do serviço.",
+        "exemplos": ["Técnico foi para atendimento, porém identificou que é necessário utilizar outro equipamento do que foi descrito como problema."],
         "campos": campos("Descreber o Problema", "Cliente", "Data", "Hora"),
         "mascaras": [{
             "id": "padrao",

@@ -50,7 +50,7 @@ def slug(s: str) -> str:
 
 def normalize_token(token: str) -> str:
     """
-    Normaliza os [TOKENS] do catálogo para chaves de campos.
+    Normaliza os [TOKENS] do template para chaves de campos.
     Suporta sufixos numéricos: [DATA 2], [HORA 3], [DATA/HORA 2], etc.
     """
     t = slug(token)
@@ -59,7 +59,7 @@ def normalize_token(token: str) -> str:
     if ("descr" in t) and ("problem" in t):
         return "descreber_o_problema"
 
-    # DATA/HORA com sufixo (data_hora, data_hora_2, data_hora_3, ...)
+    # DATA/HORA com sufixo
     m = re.match(r"^data_hora(?:_(\d+))?$", t)
     if m:
         n = m.group(1)
@@ -71,13 +71,13 @@ def normalize_token(token: str) -> str:
             return "__DATAHORA3__"
         return f"__DATAHORA{n}__"
 
-    # DATA (só data) com sufixo
+    # DATA com sufixo
     m = re.match(r"^data(?:_(\d+))?$", t)
     if m:
         n = m.group(1)
         return f"data_{n}" if n and n != "1" else "data"
 
-    # HORA (só hora) com sufixo
+    # HORA com sufixo
     m = re.match(r"^hora(?:_(\d+))?$", t)
     if m:
         n = m.group(1)
@@ -180,9 +180,13 @@ def limpar_tudo():
             del st.session_state[k]
 
 # =========================================================
-# Utilitário para construir lista de campos
+# Utilitários para construir campos
 # =========================================================
 def campos(*labels):
+    """
+    Constrói campos usando o label como base do 'name'.
+    Use quando não precisar separar 'name' interno do rótulo.
+    """
     out = []
     for lbl in labels:
         if not lbl:
@@ -195,8 +199,22 @@ def campos(*labels):
         })
     return out
 
+def campo(name_base: str, label: str, placeholder: str = "", required: bool = True):
+    """
+    Constrói um único campo permitindo definir:
+      - name interno (ex.: 'data', 'hora', 'asm'…)
+      - label visível ao usuário (ex.: 'Data do contato com o cliente')
+    """
+    return {
+        "name": slug(name_base),
+        "label": label,
+        "placeholder": placeholder,
+        "required": required
+    }
+
 # =========================================================
-# Catálogo de 23 MOTIVOS (idêntico ao aprovado, com 2 templates ajustados)
+# Catálogo de 23 MOTIVOS (idêntico ao aprovado; com rótulos explícitos
+# para os motivos que têm múltiplas datas/horas)
 # =========================================================
 CATALOGO = [
     # 1) Alteração do tipo de serviço – De assistência para reinstalação
@@ -379,14 +397,22 @@ CATALOGO = [
         }]
     },
 
-    # 10) Erro de roteirização - Atendimento móvel (template corrigido)
+    # 10) Erro de roteirização - Atendimento móvel (rótulos explícitos)
     {
         "id": "erro_roteirizacao_movel",
         "titulo": "Erro de roteirização do agendamento - Atendimento móvel",
         "acao": "Cancelar agendamento",
         "quando_usar": "Quando houver uma falha no agendamento, e permite que o cliente consiga fazer agendamento no portal do cliente de um dia para o outro ou no mesmo dia, sem considerar o deslocamento.",
         "exemplos": ["Deslocamento de retorno não considerado, técnico sem tempo hábil para execução, comercial informado."],
-        "campos": campos("Descreber o Problema", "Cliente", "Data", "Hora", "Especialista", "Data", "Hora"),
+        "campos": [
+            campo("descreber_o_problema", "Descreber o Problema"),
+            campo("nome", "Cliente"),
+            campo("data", "Data do contato com o cliente"),
+            campo("hora", "Hora do contato com o cliente"),
+            campo("especialista", "Especialista"),
+            campo("data", "Data do contato com o especialista"),
+            campo("hora", "Hora do contato com o especialista"),
+        ],
         "mascaras": [{
             "id": "padrao",
             "rotulo": "Padrão",
@@ -467,14 +493,22 @@ CATALOGO = [
         }]
     },
 
-    # 15) Instabilidade de Equipamento/Sistema (template com 3 datas)
+    # 15) Instabilidade de Equipamento/Sistema (rótulos explícitos + 3 datas)
     {
         "id": "instabilidade_sistema",
         "titulo": "Instabilidade de Equipamento/Sistema",
         "acao": "Contatar a central para conclusão; se não possível, registrar ação com nº da ASM.",
         "quando_usar": "Quando deu problema no sistema ou no equipamento e não foi possível terminar o serviço.",
         "exemplos": ["Rastreador não iniciou comunicação com a plataforma."],
-        "campos": campos("Data", "Hora", "Equipamento/Sistema", "Data", "Data", "Hora", "ASM"),
+        "campos": [
+            campo("data", "Data do fim do atendimento"),
+            campo("hora", "Hora do fim do atendimento"),
+            campo("equipamento_sistema", "Equipamento/Sistema"),
+            campo("data", "Data do teste/reinstalação"),
+            campo("data", "Data do contato com a central"),
+            campo("hora", "Hora do contato com a central"),
+            campo("asm", "ASM"),
+        ],
         "mascaras": [{
             "id": "padrao",
             "rotulo": "Padrão",
@@ -677,7 +711,7 @@ with col_esq:
 
     for idx, c in enumerate(motivo["campos"]):
         base_name = c["name"]              # ex.: "data"
-        label = c["label"]                 # ex.: "Data"
+        label = c["label"]                 # ex.: "Data do contato com o cliente"
         req = bool(c.get("required", False)) or (base_name in obrig_extra)
 
         # número da ocorrência para esse base_name (data -> data, data_2, data_3)
@@ -804,3 +838,4 @@ st.markdown("---")
 st.subheader("Prévia da tabela")
 df_prev = pd.DataFrame(st.session_state.LINHAS) if st.session_state.LINHAS else pd.DataFrame()
 st.dataframe(df_prev, use_container_width=True)
+

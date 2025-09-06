@@ -50,16 +50,16 @@ def slug(s: str) -> str:
 
 def normalize_token(token: str) -> str:
     """
-    Normaliza os [TOKENS] do template para chaves de campos.
+    Normaliza os [TOKENS] do catálogo para chaves de campos.
     Suporta sufixos numéricos: [DATA 2], [HORA 3], [DATA/HORA 2], etc.
     """
     t = slug(token)
 
-    # Descrever problema (qualquer variação vira a mesma chave)
+    # Descrever problema
     if ("descr" in t) and ("problem" in t):
         return "descreber_o_problema"
 
-    # DATA/HORA com sufixo
+    # DATA/HORA 1..N
     m = re.match(r"^data_hora(?:_(\d+))?$", t)
     if m:
         n = m.group(1)
@@ -71,13 +71,13 @@ def normalize_token(token: str) -> str:
             return "__DATAHORA3__"
         return f"__DATAHORA{n}__"
 
-    # DATA com sufixo
+    # DATA 1..N
     m = re.match(r"^data(?:_(\d+))?$", t)
     if m:
         n = m.group(1)
         return f"data_{n}" if n and n != "1" else "data"
 
-    # HORA com sufixo
+    # HORA 1..N
     m = re.match(r"^hora(?:_(\d+))?$", t)
     if m:
         n = m.group(1)
@@ -116,7 +116,6 @@ def normalize_token(token: str) -> str:
         "item": "item",
     }
 
-    # Variações de "descrever"
     if t in ("descreva", "descrever", "descrever_problema", "descrever_o_problema",
              "descreva_o_problema", "descricao_do_problema"):
         return "descreber_o_problema"
@@ -154,7 +153,7 @@ def build_mask(template: str, values: dict) -> str:
             text = text.replace(f"[{tok}]", rep)
             continue
 
-        # chave normalizada direta (DATA, DATA 2, HORA, HORA 3, etc.)
+        # chave normalizada direta
         if norm in values and values.get(norm, "") != "":
             text = text.replace(f"[{tok}]", values.get(norm, "").strip())
             continue
@@ -165,8 +164,6 @@ def build_mask(template: str, values: dict) -> str:
             text = text.replace(f"[{tok}]", values.get(s, "").strip())
             continue
 
-        # se ainda não substituiu, deixa o token como está
-
     text = re.sub(r"\s+\.", ".", text)
     return text.strip()
 
@@ -176,17 +173,13 @@ def limpar_tudo():
         st.session_state.LINHAS = []
     st.session_state.reset_token = st.session_state.get("reset_token", 0) + 1
     for k in list(st.session_state.keys()):
-        if k.startswith(("inp_", "alt_", "mot_sel_")):
+        if k.startswith(("inp_", "alt_", "mot_sel_", "os_consulta_", "mask_")):
             del st.session_state[k]
 
 # =========================================================
-# Utilitários para construir campos
+# Utilitário para construir lista de campos
 # =========================================================
 def campos(*labels):
-    """
-    Constrói campos usando o label como base do 'name'.
-    Use quando não precisar separar 'name' interno do rótulo.
-    """
     out = []
     for lbl in labels:
         if not lbl:
@@ -199,22 +192,8 @@ def campos(*labels):
         })
     return out
 
-def campo(name_base: str, label: str, placeholder: str = "", required: bool = True):
-    """
-    Constrói um único campo permitindo definir:
-      - name interno (ex.: 'data', 'hora', 'asm'…)
-      - label visível ao usuário (ex.: 'Data do contato com o cliente')
-    """
-    return {
-        "name": slug(name_base),
-        "label": label,
-        "placeholder": placeholder,
-        "required": required
-    }
-
 # =========================================================
-# Catálogo de 23 MOTIVOS (idêntico ao aprovado; com rótulos explícitos
-# para os motivos que têm múltiplas datas/horas)
+# Catálogo de 23 MOTIVOS (idêntico ao aprovado, com ajustes de máscaras)
 # =========================================================
 CATALOGO = [
     # 1) Alteração do tipo de serviço – De assistência para reinstalação
@@ -397,22 +376,14 @@ CATALOGO = [
         }]
     },
 
-    # 10) Erro de roteirização - Atendimento móvel (rótulos explícitos)
+    # 10) Erro de roteirização - Atendimento móvel
     {
         "id": "erro_roteirizacao_movel",
         "titulo": "Erro de roteirização do agendamento - Atendimento móvel",
         "acao": "Cancelar agendamento",
         "quando_usar": "Quando houver uma falha no agendamento, e permite que o cliente consiga fazer agendamento no portal do cliente de um dia para o outro ou no mesmo dia, sem considerar o deslocamento.",
         "exemplos": ["Deslocamento de retorno não considerado, técnico sem tempo hábil para execução, comercial informado."],
-        "campos": [
-            campo("descreber_o_problema", "Descreber o Problema"),
-            campo("nome", "Cliente"),
-            campo("data", "Data do contato com o cliente"),
-            campo("hora", "Hora do contato com o cliente"),
-            campo("especialista", "Especialista"),
-            campo("data", "Data do contato com o especialista"),
-            campo("hora", "Hora do contato com o especialista"),
-        ],
+        "campos": campos("Descreber o Problema", "Cliente", "Data", "Hora", "Especialista", "Data", "Hora"),
         "mascaras": [{
             "id": "padrao",
             "rotulo": "Padrão",
@@ -493,22 +464,14 @@ CATALOGO = [
         }]
     },
 
-    # 15) Instabilidade de Equipamento/Sistema (rótulos explícitos + 3 datas)
+    # 15) Instabilidade de Equipamento/Sistema (3 datas/horas)
     {
         "id": "instabilidade_sistema",
         "titulo": "Instabilidade de Equipamento/Sistema",
         "acao": "Contatar a central para conclusão; se não possível, registrar ação com nº da ASM.",
         "quando_usar": "Quando deu problema no sistema ou no equipamento e não foi possível terminar o serviço.",
         "exemplos": ["Rastreador não iniciou comunicação com a plataforma."],
-        "campos": [
-            campo("data", "Data do fim do atendimento"),
-            campo("hora", "Hora do fim do atendimento"),
-            campo("equipamento_sistema", "Equipamento/Sistema"),
-            campo("data", "Data do teste/reinstalação"),
-            campo("data", "Data do contato com a central"),
-            campo("hora", "Hora do contato com a central"),
-            campo("asm", "ASM"),
-        ],
+        "campos": campos("Data", "Hora", "Equipamento/Sistema", "Data", "Data", "Hora", "ASM"),
         "mascaras": [{
             "id": "padrao",
             "rotulo": "Padrão",
@@ -672,6 +635,12 @@ if "reset_token" not in st.session_state:
 # =========================================================
 st.markdown("**Ferramenta para identificar como classificar No-show.**")
 
+# Campo opcional de OS (antes do seletor de motivos)
+os_consulta = st.text_input(
+    "Número da OS (opcional) — podem deixar em branco",
+    key=f"os_consulta_{st.session_state.reset_token}"
+).strip()
+
 st.markdown("**1. Motivos – selecionar um aqui:**")
 motivos_map = {m["titulo"]: m for m in CATALOGO}
 motivo_titulo = st.selectbox(
@@ -706,32 +675,56 @@ with col_esq:
     # --------- BLOCO DE INPUTS (com chaves únicas e numeradas) ----------
     valores = {}
     erros = []
-    counts_by_name = {}      # conta repetições por base-name (data, hora, ...)
-    counts_by_label = {}     # idem para rótulo (para exportar bonito)
+    counts_by_name = {}
+    counts_by_label = {}
 
     for idx, c in enumerate(motivo["campos"]):
-        base_name = c["name"]              # ex.: "data"
-        label = c["label"]                 # ex.: "Data do contato com o cliente"
+        base_name = c["name"]
+        label = c["label"]
         req = bool(c.get("required", False)) or (base_name in obrig_extra)
 
-        # número da ocorrência para esse base_name (data -> data, data_2, data_3)
         occ = counts_by_name.get(base_name, 0) + 1
         counts_by_name[base_name] = occ
         eff_name = base_name if occ == 1 else f"{base_name}_{occ}"
 
         widget_key = f"inp_{motivo['id']}_{idx}_{eff_name}_{st.session_state.reset_token}"
 
+        # rótulos explícitos para campos repetidos (quando fizer sentido)
+        pretty_label = label
+        if label.lower().startswith("data") or label.lower().startswith("hora"):
+            # exemplos de rotulagem mais clara por motivo (ponto opcional)
+            if motivo["id"] == "instabilidade_sistema":
+                explicitos = {
+                    1: ("Data do fim do atendimento", "Hora do fim do atendimento"),
+                    2: ("Data do teste/reinstalação", None),
+                    3: ("Data do contato com a central", "Hora do contato com a central")
+                }
+                pair = explicitos.get(occ, (None, None))
+                if label.lower().startswith("data") and pair[0]:
+                    pretty_label = pair[0]
+                if label.lower().startswith("hora") and pair[1]:
+                    pretty_label = pair[1]
+            elif motivo["id"] == "erro_roteirizacao_movel":
+                explicitos = {
+                    1: ("Data do contato com o cliente", "Hora do contato com o cliente"),
+                    2: (None, "Hora do contato com o especialista")
+                }
+                pair = explicitos.get(occ, (None, None))
+                if label.lower().startswith("data") and pair[0]:
+                    pretty_label = pair[0]
+                if label.lower().startswith("hora") and pair[1]:
+                    pretty_label = pair[1]
+
         val = st.text_input(
-            label,
+            pretty_label,
             value="",
             placeholder=c.get("placeholder", ""),
             key=widget_key
         ).strip()
 
         valores[eff_name] = val
-
         if req and not valores.get(eff_name, ""):
-            erros.append(f"Preencha o campo obrigatório: **{label}**")
+            erros.append(f"Preencha o campo obrigatório: **{pretty_label}**")
     # --------------------------------------------------------------------
 
     # máscara gerada
@@ -739,7 +732,14 @@ with col_esq:
     mascara = build_mask(template, valores)
 
     st.markdown("**3. Texto padrão (Máscara) para incluir na Ordem de Serviço.**")
-    st.text_area("Máscara gerada", value=mascara, height=140, label_visibility="collapsed")
+    # <<< O atendente pode editar/ acrescenter texto; isso vai para a tabela
+    mascara_editada = st.text_area(
+        "Máscara gerada",
+        value=mascara,
+        key=f"mask_{motivo['id']}_{st.session_state.reset_token}",
+        height=140,
+        label_visibility="collapsed"
+    ).strip()
 
     c1, c2, c3, c4 = st.columns(4)
     add = c1.button("Adicionar à tabela")
@@ -751,16 +751,17 @@ with col_esq:
             for e in erros:
                 st.warning(e)
         else:
-            # para exportação, gere colunas numeradas quando rótulo se repete
             registro = {
+                "Número OS (consulta)": os_consulta,
                 "Motivo": motivo["titulo"],
                 "Versão máscara": alternativa["rotulo"],
                 "Ação sistêmica": motivo.get("acao", ""),
                 "Quando usar": motivo.get("quando_usar", ""),
-                "Máscara": mascara,
+                # guarda exatamente o que está na caixa 3
+                "Máscara": mascara_editada,
             }
 
-            # reitera nos campos na mesma ordem para montar rótulos Data, Data 2...
+            # incluir todos os campos preenchidos (com rótulos numerados quando repetem)
             counts_by_name = {}
             counts_by_label = {}
             for idx, c in enumerate(motivo["campos"]):
@@ -770,7 +771,6 @@ with col_esq:
                 counts_by_name[base_name] = occ
                 eff_name = base_name if occ == 1 else f"{base_name}_{occ}"
 
-                # rótulo exportável
                 occ_label = counts_by_label.get(label, 0) + 1
                 counts_by_label[label] = occ_label
                 col_label = label if occ_label == 1 else f"{label} {occ_label}"
@@ -788,11 +788,11 @@ with col_esq:
             # Fallback esperto: openpyxl -> xlsxwriter -> CSV
             engine = None
             try:
-                import openpyxl  # noqa
+                import openpyxl  # noqa: F401
                 engine = "openpyxl"
             except Exception:
                 try:
-                    import xlsxwriter  # noqa
+                    import xlsxwriter  # noqa: F401
                     engine = "xlsxwriter"
                 except Exception:
                     engine = None
@@ -838,4 +838,3 @@ st.markdown("---")
 st.subheader("Prévia da tabela")
 df_prev = pd.DataFrame(st.session_state.LINHAS) if st.session_state.LINHAS else pd.DataFrame()
 st.dataframe(df_prev, use_container_width=True)
-

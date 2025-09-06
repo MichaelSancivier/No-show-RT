@@ -1,4 +1,4 @@
-# Classificação No-show
+# Classificação No-show para RT's.
 
 Aplicativo em **Streamlit** para padronizar a classificação de **no-show** em atendimentos técnicos.  
 Permite selecionar motivos, preencher informações solicitadas e gerar automaticamente uma **máscara de texto** para registro na Ordem de Serviço (OS).  

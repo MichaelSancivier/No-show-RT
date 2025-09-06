@@ -50,16 +50,16 @@ def slug(s: str) -> str:
 
 def normalize_token(token: str) -> str:
     """
-    Normaliza os [TOKENS] do template para chaves de campos.
+    Normaliza os [TOKENS] do catálogo para chaves de campos.
     Suporta sufixos numéricos: [DATA 2], [HORA 3], [DATA/HORA 2], etc.
     """
     t = slug(token)
 
-    # Descrever problema (qualquer variação vira a mesma chave)
+    # Descrever problema
     if ("descr" in t) and ("problem" in t):
         return "descreber_o_problema"
 
-    # DATA/HORA com sufixo
+    # DATA/HORA 1..N
     m = re.match(r"^data_hora(?:_(\d+))?$", t)
     if m:
         n = m.group(1)
@@ -71,13 +71,13 @@ def normalize_token(token: str) -> str:
             return "__DATAHORA3__"
         return f"__DATAHORA{n}__"
 
-    # DATA com sufixo
+    # DATA 1..N
     m = re.match(r"^data(?:_(\d+))?$", t)
     if m:
         n = m.group(1)
         return f"data_{n}" if n and n != "1" else "data"
 
-    # HORA com sufixo
+    # HORA 1..N
     m = re.match(r"^hora(?:_(\d+))?$", t)
     if m:
         n = m.group(1)
@@ -116,7 +116,6 @@ def normalize_token(token: str) -> str:
         "item": "item",
     }
 
-    # Variações de "descrever"
     if t in ("descreva", "descrever", "descrever_problema", "descrever_o_problema",
              "descreva_o_problema", "descricao_do_problema"):
         return "descreber_o_problema"
@@ -154,7 +153,7 @@ def build_mask(template: str, values: dict) -> str:
             text = text.replace(f"[{tok}]", rep)
             continue
 
-        # chave normalizada direta (DATA, DATA 2, HORA, HORA 3, etc.)
+        # chave normalizada direta
         if norm in values and values.get(norm, "") != "":
             text = text.replace(f"[{tok}]", values.get(norm, "").strip())
             continue
@@ -165,8 +164,6 @@ def build_mask(template: str, values: dict) -> str:
             text = text.replace(f"[{tok}]", values.get(s, "").strip())
             continue
 
-        # se ainda não substituiu, deixa o token como está
-
     text = re.sub(r"\s+\.", ".", text)
     return text.strip()
 
@@ -176,11 +173,11 @@ def limpar_tudo():
         st.session_state.LINHAS = []
     st.session_state.reset_token = st.session_state.get("reset_token", 0) + 1
     for k in list(st.session_state.keys()):
-        if k.startswith(("inp_", "alt_", "mot_sel_", "os_consulta_")):
+        if k.startswith(("inp_", "alt_", "mot_sel_", "os_consulta_", "mask_")):
             del st.session_state[k]
 
 # =========================================================
-# Utilitários para construir campos
+# Utilitário para construir lista de campos
 # =========================================================
 def campos(*labels):
     out = []
@@ -195,17 +192,8 @@ def campos(*labels):
         })
     return out
 
-def campo(name_base: str, label: str, placeholder: str = "", required: bool = True):
-    return {
-        "name": slug(name_base),
-        "label": label,
-        "placeholder": placeholder,
-        "required": required
-    }
-
 # =========================================================
-# Catálogo (igual à versão aprovada, com rótulos explícitos
-# nos motivos com múltiplas datas/horas)
+# Catálogo de 23 MOTIVOS (idêntico ao aprovado, com ajustes de máscaras)
 # =========================================================
 CATALOGO = [
     # 1) Alteração do tipo de serviço – De assistência para reinstalação
@@ -233,7 +221,7 @@ CATALOGO = [
         "id": "improdutivo_ponto_fixo_movel",
         "titulo": "Atendimento Improdutivo – Ponto Fixo/Móvel",
         "acao": "Cancelar agendamento",
-        "quando_usar": "Quando o veículo está presente mas não foi possível atender (problema mecânico, elétrico ou condição do veículo).",
+        "quando_usar": "Quando o veículo está presente mas não foi possível atender (problema mecânico, elétrico ou condição do veículo). Se ponto móvel, considere também quando o atendimento em campo não pôde ser feito por fatores externos (chuva ou local sem condição).",
         "exemplos": [
             "1) O cliente trouxe o veículo, ele compareceu para atendimento, mas o veículo apresentou falhas elétrica.",
             "2) O local para atendimento não possuía cobertura para atendimento. (chuva, etc.)."
@@ -255,8 +243,8 @@ CATALOGO = [
         "acao": "Cancelar agendamento",
         "quando_usar": "Quando o próprio cliente solicita o cancelamento do atendimento.",
         "exemplos": [
-            "1) Cliente ligou pedindo para remarcar...",
-            "2) Entramos em contato com o cliente..."
+            "1) Cliente ligou pedindo para remarcar porque o motorista estaria em viagem, ou porque não chegaria a tempo, ou veículo está na oficina.",
+            "2) Entramos em contato com o cliente para confirmar o atendimento ele disse que o veículo estará em viagem ou indisponível."
         ],
         "campos": campos("Nome", "Canal", "Data", "Hora"),
         "mascaras": [{
@@ -285,13 +273,16 @@ CATALOGO = [
         }]
     },
 
-    # 5) Cronograma...
+    # 5) Cronograma de Instalação/Substituição de Placa (2 opções)
     {
         "id": "cronograma_substituicao_placa",
         "titulo": "Cronograma de Instalação/Substituição de Placa",
         "acao": "Cancelar agendamento",
-        "quando_usar": "Quando o atendimento faz parte de cronograma especial.",
-        "exemplos": ["1) Cliente substituiu por essa OS...", "2) Operação especial..."],
+        "quando_usar": "Quando o atendimento faz parte de cronograma especial pré-acordado / operação especial.",
+        "exemplos": [
+            "1) Cliente substituiu por essa OS 462270287.",
+            "2) Operação especial, sem envio de veículo como substituição."
+        ],
         "campos": campos("Número OS"),
         "mascaras": [
             {
@@ -311,13 +302,16 @@ CATALOGO = [
         ]
     },
 
-    # 6) Erro: Cliente desconhecia
+    # 6) Erro De Agendamento - Cliente desconhecia o agendamento
     {
         "id": "erro_cliente_desconhecia",
         "titulo": "Erro De Agendamento - Cliente desconhecia o agendamento",
         "acao": "Cancelar agendamento",
-        "quando_usar": "OS foi agendada sem que o cliente tivesse sido informado previamente.",
-        "exemplos": ["1) Técnico chegou e o cliente disse não ter solicitado...", "2) Realizamos contato..."],
+        "quando_usar": "OS foi agendada sem que o cliente tivesse sido informado previamente, resultando em ausência ou recusa no momento do atendimento técnico. Obrigatório informar: Nome do cliente que entrou em contato, horário do cancelamento e canal de contato (preferencialmente canal que seja possível a futura comprovação).",
+        "exemplos": [
+            "1) Técnico chegou e o cliente disse não ter solicitado nenhum serviço ou foi entrado em contato com o cliente e o mesmo informou que desconhecia o agendamento.​",
+            "2) Realizamos contato com o cliente ele informou que desconhecia o agendamento."
+        ],
         "campos": campos("Nome Cliente", "Data", "Hora"),
         "mascaras": [{
             "id": "padrao",
@@ -328,13 +322,13 @@ CATALOGO = [
         }]
     },
 
-    # 7) Endereço incorreto
+    # 7) Erro de Agendamento – Endereço incorreto
     {
         "id": "erro_endereco_incorreto",
         "titulo": "Erro de Agendamento – Endereço incorreto",
         "acao": "Cancelar agendamento",
-        "quando_usar": "Endereço informado na OS está incorreto ou incompleto.",
-        "exemplos": ["Técnico direcionado para rua X..."],
+        "quando_usar": "Endereço informado na OS está incorreto ou incompleto, inviabilizando a chegada ao local para execução do serviço.",
+        "exemplos": ["Técnico direcionado para rua X, mas cliente está na rua Y, inviabilizando o atendimento."],
         "campos": campos("Tipo erro", "Descreva", "Nome", "Data", "Hora"),
         "mascaras": [{
             "id": "padrao",
@@ -345,12 +339,12 @@ CATALOGO = [
         }]
     },
 
-    # 8) Falta de informações
+    # 8) Erro de Agendamento – Falta de informações na O.S.
     {
         "id": "erro_falta_info_os",
         "titulo": "Erro de Agendamento – Falta de informações na O.S.",
         "acao": "Cancelar agendamento",
-        "quando_usar": "OS criada com informações incompletas.",
+        "quando_usar": "OS criada com informações incompletas, como ausência de dados do cliente, tipo de serviço ou outros campos obrigatórios que inviabilizam o atendimento.",
         "exemplos": ["Não há solução cadastrada no sistema."],
         "campos": campos("Tipo erro", "Explique", "Nome", "Data", "Hora"),
         "mascaras": [{
@@ -362,13 +356,16 @@ CATALOGO = [
         }]
     },
 
-    # 9) OS incorreta
+    # 9) Erro de Agendamento – O.S. agendada incorretamente
     {
         "id": "erro_os_incorreta",
         "titulo": "Erro de Agendamento – O.S. agendada incorretamente (tipo/motivo/produto)",
         "acao": "Cancelar agendamento",
-        "quando_usar": "Erro na categorização do serviço ao agendar a OS.",
-        "exemplos": ["1) Cliente pediu assistência...", "2) Agendamento no mesmo dia..."],
+        "quando_usar": "Erro na categorização do serviço ao agendar a OS (ex: tipo de atendimento ou produto incorreto), levando à impossibilidade de execução correta.",
+        "exemplos": [
+            "1) Cliente pediu assistência e foi agendada instalação por engano.",
+            "2) Agendamento no mesmo dia sem autorização."
+        ],
         "campos": campos("Tipo erro", "Explique", "Nome", "Data", "Hora"),
         "mascaras": [{
             "id": "padrao",
@@ -379,22 +376,14 @@ CATALOGO = [
         }]
     },
 
-    # 10) Erro de roteirização - móvel (rótulos explícitos)
+    # 10) Erro de roteirização - Atendimento móvel
     {
         "id": "erro_roteirizacao_movel",
         "titulo": "Erro de roteirização do agendamento - Atendimento móvel",
         "acao": "Cancelar agendamento",
-        "quando_usar": "Falha no agendamento permitindo marcação sem considerar deslocamento.",
-        "exemplos": ["Deslocamento de retorno não considerado, técnico sem tempo hábil..."],
-        "campos": [
-            campo("descreber_o_problema", "Descreber o Problema"),
-            campo("nome", "Cliente"),
-            campo("data", "Data do contato com o cliente"),
-            campo("hora", "Hora do contato com o cliente"),
-            campo("especialista", "Especialista"),
-            campo("data", "Data do contato com o especialista"),
-            campo("hora", "Hora do contato com o especialista"),
-        ],
+        "quando_usar": "Quando houver uma falha no agendamento, e permite que o cliente consiga fazer agendamento no portal do cliente de um dia para o outro ou no mesmo dia, sem considerar o deslocamento.",
+        "exemplos": ["Deslocamento de retorno não considerado, técnico sem tempo hábil para execução, comercial informado."],
+        "campos": campos("Descreber o Problema", "Cliente", "Data", "Hora", "Especialista", "Data", "Hora"),
         "mascaras": [{
             "id": "padrao",
             "rotulo": "Padrão",
@@ -404,13 +393,13 @@ CATALOGO = [
         }]
     },
 
-    # 11) Falta Acessórios Imobilizado
+    # 11) Falta De Equipamento - Acessórios Imobilizado
     {
         "id": "falta_acessorios_imobilizado",
         "titulo": "Falta De Equipamento - Acessórios Imobilizado",
         "acao": "Cancelar agendamento",
-        "quando_usar": "Acessórios imobilizados em outro atendimento.",
-        "exemplos": ["Agendamento precisará ser cancelado..."],
+        "quando_usar": "Falta de acessórios que estão alocados (imobilizados) em outro atendimento, impedindo a realização do serviço agendado.",
+        "exemplos": ["Agendamento precisara ser cancelado, pois estamos sem o sensor temperatura NTC 10K , o mesmo foi pedido para a distribuição mas ainda não chegou."],
         "campos": campos("Item", "Cliente", "Data", "Hora"),
         "mascaras": [{
             "id": "padrao",
@@ -421,12 +410,12 @@ CATALOGO = [
         }]
     },
 
-    # 12) Item Não Compatível
+    # 12) Falta De Equipamento - Item Reservado Não Compatível
     {
         "id": "falta_item_reservado_incompativel",
         "titulo": "Falta De Equipamento - Item Reservado Não Compatível",
         "acao": "Cancelar agendamento",
-        "quando_usar": "Material reservado incompatível com o veículo/serviço.",
+        "quando_usar": "Material reservado está incompatível com o veículo ou serviço solicitado, mesmo estando disponível no estoque.",
         "exemplos": ["Instalação não concluída por falta de rastreador compatível."],
         "campos": campos("Item", "Cliente", "Data", "Hora"),
         "mascaras": [{
@@ -438,12 +427,12 @@ CATALOGO = [
         }]
     },
 
-    # 13) Falta Material
+    # 13) Falta De Equipamento - Material
     {
         "id": "falta_material",
         "titulo": "Falta De Equipamento - Material",
         "acao": "Cancelar agendamento",
-        "quando_usar": "Ausência total de material necessário.",
+        "quando_usar": "Ausência total de material necessário para a execução da OS, mesmo após verificação de estoque.",
         "exemplos": ["Falta equipamento ADPLUS."],
         "campos": campos("Item", "Cliente", "Data", "Hora"),
         "mascaras": [{
@@ -455,13 +444,16 @@ CATALOGO = [
         }]
     },
 
-    # 14) Falta Principal
+    # 14) Falta De Equipamento - Principal
     {
         "id": "falta_principal",
         "titulo": "Falta De Equipamento - Principal",
         "acao": "Cancelar agendamento",
-        "quando_usar": "Técnico sem o principal equipamento necessário.",
-        "exemplos": ["RT com falta de equipamento...", "Aguardando o equipamento RFID."],
+        "quando_usar": "Atendimento foi marcado, mas o técnico não tinha consigo o equipamento principal necessário, mesmo estando previsto para o serviço.",
+        "exemplos": [
+            "1) RT Com falta de equipamento LMU4233.​",
+            "2) Aguardando o equipamento RFID."
+        ],
         "campos": campos("Item", "Cliente", "Data", "Hora"),
         "mascaras": [{
             "id": "padrao",
@@ -472,22 +464,14 @@ CATALOGO = [
         }]
     },
 
-    # 15) Instabilidade (rótulos explícitos + 3 datas)
+    # 15) Instabilidade de Equipamento/Sistema (3 datas/horas)
     {
         "id": "instabilidade_sistema",
         "titulo": "Instabilidade de Equipamento/Sistema",
         "acao": "Contatar a central para conclusão; se não possível, registrar ação com nº da ASM.",
-        "quando_usar": "Problema no sistema/equipamento impediu a conclusão.",
+        "quando_usar": "Quando deu problema no sistema ou no equipamento e não foi possível terminar o serviço.",
         "exemplos": ["Rastreador não iniciou comunicação com a plataforma."],
-        "campos": [
-            campo("data", "Data do fim do atendimento"),
-            campo("hora", "Hora do fim do atendimento"),
-            campo("equipamento_sistema", "Equipamento/Sistema"),
-            campo("data", "Data do teste/reinstalação"),
-            campo("data", "Data do contato com a central"),
-            campo("hora", "Hora do contato com a central"),
-            campo("asm", "ASM"),
-        ],
+        "campos": campos("Data", "Hora", "Equipamento/Sistema", "Data", "Data", "Hora", "ASM"),
         "mascaras": [{
             "id": "padrao",
             "rotulo": "Padrão",
@@ -501,13 +485,13 @@ CATALOGO = [
         }]
     },
 
-    # 16) No-show Cliente
+    # 16) No-show Cliente – Ponto Fixo/Móvel
     {
         "id": "no_show_cliente",
         "titulo": "No-show Cliente – Ponto Fixo/Móvel",
         "acao": "Cancelar agendamento",
-        "quando_usar": "Cliente não aparece ou não está disponível no ponto móvel.",
-        "exemplos": ["Veículo chegou com atraso > 15 min."],
+        "quando_usar": "Quando o cliente não aparece no local/empresa (fixo) ou não está disponível no ponto móvel.",
+        "exemplos": ["O técnico chegou ao cliente, mas o caminhão estava em rota de viagem, o veículo não compareceu no ponto de atendimento, o veículo chegou com atraso superior a 15 minutos."],
         "campos": campos("Hora"),
         "mascaras": [{
             "id": "padrao",
@@ -523,7 +507,7 @@ CATALOGO = [
         "id": "no_show_tecnico",
         "titulo": "No-show Técnico",
         "acao": "Cancelar agendamento",
-        "quando_usar": "Técnico não comparece.",
+        "quando_usar": "Quando o técnico não comparece no horário/local.",
         "exemplos": ["Técnico não realizou o atendimento."],
         "campos": campos("Nome Técnico", "Data", "Hora", "Motivo"),
         "mascaras": [{
@@ -535,13 +519,13 @@ CATALOGO = [
         }]
     },
 
-    # 18) Ocorrência com Técnico – Impossível
+    # 18) Ocorrência com Técnico – Não foi possível realizar atendimento
     {
         "id": "oc_tecnico_impossivel",
         "titulo": "Ocorrência com Técnico – Não foi possível realizar atendimento",
         "acao": "Cancelar agendamento",
-        "quando_usar": "Impossibilidade por questões pessoais/operacionais.",
-        "exemplos": ["Técnico não se sentiu bem..."],
+        "quando_usar": "Quando o técnico não consegue realizar o atendimento por questões pessoais ou operacionais, como: Problemas de saúde e pessoais; Problemas no veículo do técnico ou acidentes, ou outras impossibilidades de comparecer ao local. Deve ser informar horário, nome do cliente e canal de contato (voz, e-mail, whatsapp) que foi informado o cliente sobre a impossibilidade de atendimento.",
+        "exemplos": ["Técnico não se sentiu bem e teve que se ausentar na tarde de hoje."],
         "campos": campos("Descreber o Problema", "Nome"),
         "mascaras": [{
             "id": "padrao",
@@ -552,13 +536,13 @@ CATALOGO = [
         }]
     },
 
-    # 19) Ocorrência – Parcial
+    # 19) Ocorrência – Sem tempo hábil (Atendimento Parcial)
     {
         "id": "oc_tecnico_parcial",
-        "titulo": "Ocorrência Com Técnico - Sem Tempo Hábil (Atendimento Parcial)",
+        "titulo": "Ocorrência Com Técnico - Sem Tempo Hábil Para Realizar O Serviço (Atendimento Parcial)",
         "acao": "Cancelar agendamento",
-        "quando_usar": "Atendimento iniciado mas não concluído.",
-        "exemplos": ["Começou o serviço e não concluiu no mesmo dia."],
+        "quando_usar": "Quando iniciado o atendimento, porém foi identificado que não será possível concluir o serviço.",
+        "exemplos": ["Técnico começou a realizar o serviço e não conseguiu finalizar o atendimento no mesmo dia."],
         "campos": campos("Descreber o Problema", "Cliente", "Data", "Hora"),
         "mascaras": [{
             "id": "padrao",
@@ -569,13 +553,13 @@ CATALOGO = [
         }]
     },
 
-    # 20) Ocorrência – Não iniciado
+    # 20) Ocorrência – Sem tempo hábil (Não iniciado)
     {
         "id": "oc_tecnico_nao_iniciado",
-        "titulo": "Ocorrência Com Técnico - Sem Tempo Hábil (Não iniciado)",
+        "titulo": "Ocorrência Com Técnico - Sem Tempo Hábil Para Realizar O Serviço (Não iniciado)",
         "acao": "Cancelar agendamento",
-        "quando_usar": "Sem tempo por erro de agendamento/encaixe/roteirização.",
-        "exemplos": ["Anterior demorou muito e inviabilizou o próximo."],
+        "quando_usar": " Quando não houve tempo suficiente por erro de agendamento, encaixe, atraso em OS anterior ou roteirização ruim e o atendimento não foi iniciado.",
+        "exemplos": [" Atendimento anterior demorou muito mais que o previsto e inviabilizou o próximo."],
         "campos": campos("Motivo", "Cliente"),
         "mascaras": [{
             "id": "padrao",
@@ -589,10 +573,10 @@ CATALOGO = [
     # 21) Técnico sem habilidade
     {
         "id": "oc_tecnico_sem_habilidade",
-        "titulo": "Ocorrência Com Técnico - Técnico Sem Habilidade",
+        "titulo": "Ocorrência Com Técnico - Técnico Sem Habilidade Para Realizar Serviço",
         "acao": "Cancelar agendamento",
-        "quando_usar": "Técnico sem habilidade específica para o serviço.",
-        "exemplos": ["Agenda do instalador sem a habilidade necessária."],
+        "quando_usar": "Quando o representante técnico identifica que o atendimento não pode ser realizado, devido a falta de habilidade específica do técnico.",
+        "exemplos": ["Atendimento roteirizado na agenda do técnico instalador sem a habilidade necessária para a realização do serviço"],
         "campos": campos("Descreber o Problema", "Cliente"),
         "mascaras": [{
             "id": "padrao",
@@ -608,8 +592,8 @@ CATALOGO = [
         "id": "perda_extravio_defeito",
         "titulo": "Perda/Extravio/Falta Do Equipamento/Equipamento Com Defeito",
         "acao": "Cancelar agendamento",
-        "quando_usar": "Equipamento/acessório não está mais no veículo ou cliente recusa termo.",
-        "exemplos": ["Novo proprietário não aceitou assinar termo de Mau Uso."],
+        "quando_usar": "Quando o técnico identifica que o equipamento/acessório não está mais no veículo ou por falta de condições de mau uso não é possível realizar o atendimento, e o cliente se recusa a assinar o termo de cobrança.",
+        "exemplos": ["Veículo esta no local mas não tem todos os equipamentos, novo proprietário não aceitou assinar o termo de Mau Uso."],
         "campos": campos("Descreber o Problema"),
         "mascaras": [{
             "id": "padrao",
@@ -625,8 +609,8 @@ CATALOGO = [
         "id": "servico_incompativel_os",
         "titulo": "Serviço incompatível com a OS aberta",
         "acao": "Cancelar agendamento",
-        "quando_usar": "Material/equipamento separado não atende o necessário.",
-        "exemplos": ["Necessário utilizar outro equipamento."],
+        "quando_usar": "Quando iniciado o atendimento, porém foi identificado que o equipamento/material separado não atende as necessidades para conclusão do serviço.",
+        "exemplos": ["Técnico foi para atendimento, porém identificou que é necessário utilizar outro equipamento do que foi descrito como problema."],
         "campos": campos("Descreber o Problema", "Cliente", "Data", "Hora"),
         "mascaras": [{
             "id": "padrao",
@@ -651,12 +635,10 @@ if "reset_token" not in st.session_state:
 # =========================================================
 st.markdown("**Ferramenta para identificar como classificar No-show.**")
 
-# ---- NOVO CAMPO OPCIONAL DA OS EM CONSULTA (ANTES DO SELETOR) ----
+# Campo opcional de OS (antes do seletor de motivos)
 os_consulta = st.text_input(
     "Número da OS (opcional) — podem deixar em branco",
-    value="",
-    key=f"os_consulta_{st.session_state.reset_token}",
-    placeholder="Ex.: 462270287"
+    key=f"os_consulta_{st.session_state.reset_token}"
 ).strip()
 
 st.markdown("**1. Motivos – selecionar um aqui:**")
@@ -707,17 +689,42 @@ with col_esq:
 
         widget_key = f"inp_{motivo['id']}_{idx}_{eff_name}_{st.session_state.reset_token}"
 
+        # rótulos explícitos para campos repetidos (quando fizer sentido)
+        pretty_label = label
+        if label.lower().startswith("data") or label.lower().startswith("hora"):
+            # exemplos de rotulagem mais clara por motivo (ponto opcional)
+            if motivo["id"] == "instabilidade_sistema":
+                explicitos = {
+                    1: ("Data do fim do atendimento", "Hora do fim do atendimento"),
+                    2: ("Data do teste/reinstalação", None),
+                    3: ("Data do contato com a central", "Hora do contato com a central")
+                }
+                pair = explicitos.get(occ, (None, None))
+                if label.lower().startswith("data") and pair[0]:
+                    pretty_label = pair[0]
+                if label.lower().startswith("hora") and pair[1]:
+                    pretty_label = pair[1]
+            elif motivo["id"] == "erro_roteirizacao_movel":
+                explicitos = {
+                    1: ("Data do contato com o cliente", "Hora do contato com o cliente"),
+                    2: (None, "Hora do contato com o especialista")
+                }
+                pair = explicitos.get(occ, (None, None))
+                if label.lower().startswith("data") and pair[0]:
+                    pretty_label = pair[0]
+                if label.lower().startswith("hora") and pair[1]:
+                    pretty_label = pair[1]
+
         val = st.text_input(
-            label,
+            pretty_label,
             value="",
             placeholder=c.get("placeholder", ""),
             key=widget_key
         ).strip()
 
         valores[eff_name] = val
-
         if req and not valores.get(eff_name, ""):
-            erros.append(f"Preencha o campo obrigatório: **{label}**")
+            erros.append(f"Preencha o campo obrigatório: **{pretty_label}**")
     # --------------------------------------------------------------------
 
     # máscara gerada
@@ -725,7 +732,14 @@ with col_esq:
     mascara = build_mask(template, valores)
 
     st.markdown("**3. Texto padrão (Máscara) para incluir na Ordem de Serviço.**")
-    st.text_area("Máscara gerada", value=mascara, height=140, label_visibility="collapsed")
+    # <<< O atendente pode editar/ acrescenter texto; isso vai para a tabela
+    mascara_editada = st.text_area(
+        "Máscara gerada",
+        value=mascara,
+        key=f"mask_{motivo['id']}_{st.session_state.reset_token}",
+        height=140,
+        label_visibility="collapsed"
+    ).strip()
 
     c1, c2, c3, c4 = st.columns(4)
     add = c1.button("Adicionar à tabela")
@@ -737,17 +751,17 @@ with col_esq:
             for e in erros:
                 st.warning(e)
         else:
-            # Registro com a OS (opcional) como PRIMEIRA coluna
             registro = {
                 "Número OS (consulta)": os_consulta,
                 "Motivo": motivo["titulo"],
                 "Versão máscara": alternativa["rotulo"],
                 "Ação sistêmica": motivo.get("acao", ""),
                 "Quando usar": motivo.get("quando_usar", ""),
-                "Máscara": mascara,
+                # guarda exatamente o que está na caixa 3
+                "Máscara": mascara_editada,
             }
 
-            # reitera nos campos na mesma ordem para montar rótulos Data, Data 2...
+            # incluir todos os campos preenchidos (com rótulos numerados quando repetem)
             counts_by_name = {}
             counts_by_label = {}
             for idx, c in enumerate(motivo["campos"]):
@@ -774,11 +788,11 @@ with col_esq:
             # Fallback esperto: openpyxl -> xlsxwriter -> CSV
             engine = None
             try:
-                import openpyxl  # noqa
+                import openpyxl  # noqa: F401
                 engine = "openpyxl"
             except Exception:
                 try:
-                    import xlsxwriter  # noqa
+                    import xlsxwriter  # noqa: F401
                     engine = "xlsxwriter"
                 except Exception:
                     engine = None

@@ -14,4 +14,4 @@
 
 ## [v1.0.0] - 2025-09-01
 ### Inicial
-- Versão inicial do app com classificação de no-show.
+- Versão inicial do app com classificação de no-show, para 23 regras.

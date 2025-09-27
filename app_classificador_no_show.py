@@ -828,7 +828,7 @@ with col_dir:
     st.info(motivo.get("quando_usar", ""))
     st.subheader("Exemplos")
     if motivo.get("exemplos"):
-        for ex in motivo["exemplos"]]:
+        for ex in motivo["exemplos"]:
             st.success(ex)
     else:
         st.caption("Sem exemplos cadastrados.")

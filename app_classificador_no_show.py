@@ -52,12 +52,11 @@ def normalize_token(token: str) -> str:
     """
     Normaliza os [TOKENS] do catálogo para chaves de campos.
     Suporta sufixos numéricos: [DATA 2], [HORA 3], [DATA/HORA 2], etc.
-    Retorna a chave que será procurada no dict `values`.
     """
     t = slug(token)
 
-    # Descrever problema (aceita 'problema' em português ou 'problem' por segurança)
-    if ("descr" in t) and (("problem" in t) or ("problema" in t)):
+    # Descrever problema
+    if ("descr" in t) and ("problem" in t):
         return "descreber_o_problema"
 
     # DATA/HORA 1..N
@@ -85,14 +84,11 @@ def normalize_token(token: str) -> str:
         return f"hora_{n}" if n and n != "1" else "hora"
 
     # Mapeamentos diretos / sinônimos
-    # NOTE: padronizamos nomes p/ "cliente" para bater com slug("Cliente") usado em campos()
     mapping = {
-        # nomes -> unificamos para 'cliente'
-        "nome": "cliente",
-        "cliente": "cliente",
-        "nome_cliente": "cliente",
-
-        # técnico / pessoa responsável
+        # nomes
+        "nome": "nome",
+        "cliente": "nome",
+        "nome_cliente": "nome",
         "nome_tecnico": "nome_tecnico",
         "tecnico": "nome_tecnico",
 
@@ -129,18 +125,41 @@ def normalize_token(token: str) -> str:
 def build_mask(template: str, values: dict) -> str:
     """
     Substitui [TOKENS] do template pelos valores digitados.
-    - [DATA/HORA]    -> data + hora (par 1)
-    - [DATA/HORA 2]  -> data_2 + hora_2 (par 2)
-    - [DATA/HORA 3]  -> data_3 + hora_3 (par 3)
-    - [DATA], [DATA 2], [HORA], [HORA 3] etc. também funcionam.
+    Melhorias:
+    - Cria um dicionário normalizado (lower/strip) de valores.
+    - Adiciona sinônimos comuns (nome <-> cliente, numero_os <-> numero_ordem_de_servico, asm <-> numero).
+    - Tenta múltiplas chaves candidatas antes de desistir.
+    - Trata DATA/HORA 1..N corretamente.
     """
     text = str(template or "")
     tokens = re.findall(r"\[([^\]]+)\]", text)
+
+    # normaliza chaves dos valores para lookup mais tolerante
+    norm_values = {}
+    for k, v in (values or {}).items():
+        if not isinstance(k, str):
+            continue
+        key = slug(k).strip().lower()
+        val = (v or "").strip() if isinstance(v, str) else v
+        norm_values[key] = val
+
+    # sinônimos úteis
+    if "nome" in norm_values and "cliente" not in norm_values:
+        norm_values["cliente"] = norm_values["nome"]
+    if "cliente" in norm_values and "nome" not in norm_values:
+        norm_values["nome"] = norm_values["cliente"]
+    if "numero_os" in norm_values and "numero_ordem_de_servico" not in norm_values:
+        norm_values["numero_ordem_de_servico"] = norm_values["numero_os"]
+    if "asm" in norm_values and "numero" not in norm_values:
+        norm_values["numero"] = norm_values["asm"]
+    # adicionar outros sinônimos se precisar...
+
     for tok in tokens:
         norm = normalize_token(tok)
 
-        # DATA/HORA 1..N
-        if norm.startswith("__DATAHORA"):
+        # tratamento DATA/HORA
+        if isinstance(norm, str) and norm.startswith("__DATAHORA"):
+            # resolve quais chaves buscar
             if norm == "__DATAHORA__":
                 d_key, h_key = "data", "hora"
             elif norm == "__DATAHORA2__":
@@ -148,29 +167,59 @@ def build_mask(template: str, values: dict) -> str:
             elif norm == "__DATAHORA3__":
                 d_key, h_key = "data_3", "hora_3"
             else:
-                n = re.findall(r"__DATAHORA(\d+)__", norm)
-                n = n[0] if n else "1"
+                m = re.findall(r"__DATAHORA(\d+)__", norm)
+                n = m[0] if m else "1"
                 d_key, h_key = f"data_{n}", f"hora_{n}"
-            d = values.get(d_key, "").strip()
-            h = values.get(h_key, "").strip()
+
+            d = norm_values.get(d_key, "") or ""
+            h = norm_values.get(h_key, "") or ""
+            d = d.strip() if isinstance(d, str) else d
+            h = h.strip() if isinstance(h, str) else h
             rep = (f"{d} - {h}" if d and h else (d or h or ""))
             text = text.replace(f"[{tok}]", rep)
             continue
 
-        # chave normalizada direta
-        if norm in values and values.get(norm, "") != "":
-            text = text.replace(f"[{tok}]", values.get(norm, "").strip())
-            continue
-
-        # fallback por slug literal
+        # candidatas: normalizada + slug literal + alguns sinônimos simples
+        candidates = []
+        if isinstance(norm, str) and norm:
+            candidates.append(norm)
         s = slug(tok)
-        if s in values and values.get(s, "") != "":
-            text = text.replace(f"[{tok}]", values.get(s, "").strip())
-            continue
+        if s and s not in candidates:
+            candidates.append(s)
 
+        # ampliar candidatas com sinônimos simples
+        extra = []
+        for c in list(candidates):
+            if c == "nome" and "cliente" not in candidates:
+                extra.append("cliente")
+            if c == "cliente" and "nome" not in candidates:
+                extra.append("nome")
+            if c == "numero_os" and "numero_ordem_de_servico" not in candidates:
+                extra.append("numero_ordem_de_servico")
+            if c == "asm" and "numero" not in candidates:
+                extra.append("numero")
+        for e in extra:
+            if e not in candidates:
+                candidates.append(e)
+
+        # busca primeira correspondência não-vazia
+        replaced = False
+        for c in candidates:
+            if c in norm_values and norm_values.get(c, "") != "":
+                text = text.replace(f"[{tok}]", str(norm_values[c]).strip())
+                replaced = True
+                break
+
+        # se não substituiu, deixa token como está (para depuração visual)
+        if not replaced:
+            # opcional: comentar a linha abaixo para não exibir tokens não-substituídos
+            # text = text.replace(f"[{tok}]", f"[{tok}]")
+            pass
+
+    # ajeita espaço antes de ponto
     text = re.sub(r"\s+\.", ".", text)
     return text.strip()
-
+  
 def limpar_tudo():
     """Limpa todos os inputs e força recarregar a tela."""
     if "LINHAS" in st.session_state:

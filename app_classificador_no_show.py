@@ -52,11 +52,12 @@ def normalize_token(token: str) -> str:
     """
     Normaliza os [TOKENS] do catálogo para chaves de campos.
     Suporta sufixos numéricos: [DATA 2], [HORA 3], [DATA/HORA 2], etc.
+    Retorna a chave que será procurada no dict `values`.
     """
     t = slug(token)
 
-    # Descrever problema
-    if ("descr" in t) and ("problem" in t):
+    # Descrever problema (aceita 'problema' em português ou 'problem' por segurança)
+    if ("descr" in t) and (("problem" in t) or ("problema" in t)):
         return "descreber_o_problema"
 
     # DATA/HORA 1..N
@@ -84,11 +85,14 @@ def normalize_token(token: str) -> str:
         return f"hora_{n}" if n and n != "1" else "hora"
 
     # Mapeamentos diretos / sinônimos
+    # NOTE: padronizamos nomes p/ "cliente" para bater com slug("Cliente") usado em campos()
     mapping = {
-        # nomes
-        "nome": "nome",
-        "cliente": "nome",
-        "nome_cliente": "nome",
+        # nomes -> unificamos para 'cliente'
+        "nome": "cliente",
+        "cliente": "cliente",
+        "nome_cliente": "cliente",
+
+        # técnico / pessoa responsável
         "nome_tecnico": "nome_tecnico",
         "tecnico": "nome_tecnico",
 

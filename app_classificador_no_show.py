@@ -3,6 +3,8 @@
 
 import io
 import re
+import json
+import hashlib
 from datetime import datetime
 import pandas as pd
 import streamlit as st
@@ -13,8 +15,9 @@ import streamlit as st
 st.set_page_config(page_title="Classificação No-show", layout="wide")
 st.markdown("""
 <style>
-/* caixas info azul */
+/* layout */
 .block-container {padding-top: 1.2rem;}
+/* caixas info azul */
 .stAlert > div {border-left: 0.35rem solid #0ea5e9;}
 /* títulos */
 h1, h2, h3 {color: #1e3a8a;}
@@ -55,8 +58,9 @@ def normalize_token(token: str) -> str:
     """
     t = slug(token)
 
-    # Descrever problema
-    if ("descr" in t) and ("problem" in t):
+    # Descrever problema (aceita variações)
+    # IMPORTANTE: checar 'problema' em PT (não 'problem' em EN)
+    if ("descr" in t) and ("problema" in t):
         return "descreber_o_problema"
 
     # DATA/HORA 1..N
@@ -114,6 +118,12 @@ def normalize_token(token: str) -> str:
         "asm": "asm",
         "motivo": "motivo",
         "item": "item",
+
+        # === ALIASES MÍNIMOS (legado) ===
+        "erro_de_agendamento_encaixe": "motivo",
+        "demanda_excedida": "motivo",
+        "descreva_situacao": "item",
+        "descreva_situação": "item",
     }
 
     if t in ("descreva", "descrever", "descrever_problema", "descrever_o_problema",
@@ -129,6 +139,7 @@ def build_mask(template: str, values: dict) -> str:
     - [DATA/HORA 2]  -> data_2 + hora_2 (par 2)
     - [DATA/HORA 3]  -> data_3 + hora_3 (par 3)
     - [DATA], [DATA 2], [HORA], [HORA 3] etc. também funcionam.
+    Remove tokens não reconhecidos.
     """
     text = str(template or "")
     tokens = re.findall(r"\[([^\]]+)\]", text)
@@ -164,7 +175,11 @@ def build_mask(template: str, values: dict) -> str:
             text = text.replace(f"[{tok}]", values.get(s, "").strip())
             continue
 
+        # se não encontrou, remove o token
+        text = text.replace(f"[{tok}]", "")
+
     text = re.sub(r"\s+\.", ".", text)
+    text = re.sub(r"\s{2,}", " ", text)
     return text.strip()
 
 def limpar_tudo():
@@ -193,7 +208,7 @@ def campos(*labels):
     return out
 
 # =========================================================
-# Catálogo de 23 MOTIVOS (idêntico ao aprovado, com ajustes de máscaras)
+# Catálogo de MOTIVOS (com máscaras corrigidas)
 # =========================================================
 CATALOGO = [
     # 1) Alteração do tipo de serviço – De assistência para reinstalação
@@ -212,7 +227,7 @@ CATALOGO = [
             "rotulo": "Padrão",
             "descricao": "",
             "regras_obrig": [],
-            "template": "Não foi possível realizar o atendimento devido [DESCREVA O PROBLEMA]. Cliente [CLIENTE] foi informado sobre a necessidade de reagendamento."
+            "template": "Não foi possível realizar o atendimento devido [DESCREVER O PROBLEMA]. Cliente [NOME] foi informado sobre a necessidade de reagendamento."
         }]
     },
 
@@ -269,7 +284,7 @@ CATALOGO = [
             "rotulo": "Padrão",
             "descricao": "",
             "regras_obrig": [],
-            "template": "Não foi possível realizar o atendimento devido [DESCREVA O PROBLEMA]. Cliente [NOME] em [DATA/HORA], foi informado sobre a necessidade de reagendamento."
+            "template": "Não foi possível realizar o atendimento devido [DESCREVER O PROBLEMA]. Cliente [NOME] em [DATA/HORA], foi informado sobre a necessidade de reagendamento."
         }]
     },
 
@@ -389,11 +404,11 @@ CATALOGO = [
             "rotulo": "Padrão",
             "descricao": "",
             "regras_obrig": [],
-            "template": "Não foi possível concluir o atendimento devido [DESCREVA O PROBLEMA]. Cliente [NOME] às [DATA/HORA] foi informado sobre a necessidade de reagendamento. Especialista [ESPECIALISTA] informado às [DATA/HORA 2]."
+            "template": "Não foi possível concluir o atendimento devido [DESCREVER O PROBLEMA]. Cliente [NOME] às [DATA/HORA] foi informado sobre a necessidade de reagendamento. Especialista [ESPECIALISTA] informado às [DATA/HORA 2]."
         }]
     },
 
-    # 11) Falta De Equipamento - Acessórios Imobilizado
+    # 11) Falta De Equipamento - Acessórios Imobilizado (CORRIGIDO)
     {
         "id": "falta_acessorios_imobilizado",
         "titulo": "Falta De Equipamento - Acessórios Imobilizado",
@@ -406,11 +421,11 @@ CATALOGO = [
             "rotulo": "Padrão",
             "descricao": "",
             "regras_obrig": [],
-            "template": "Atendimento não realizado por falta de [DESCREVA SITUAÇÃO]. Cliente [NOME] informado em [DATA/HORA]."
+            "template": "Atendimento não realizado por falta de [ITEM]. Cliente [NOME] informado em [DATA/HORA]."
         }]
     },
 
-    # 12) Falta De Equipamento - Item Reservado Não Compatível
+    # 12) Falta De Equipamento - Item Reservado Não Compatível (CORRIGIDO)
     {
         "id": "falta_item_reservado_incompativel",
         "titulo": "Falta De Equipamento - Item Reservado Não Compatível",
@@ -423,11 +438,11 @@ CATALOGO = [
             "rotulo": "Padrão",
             "descricao": "",
             "regras_obrig": [],
-            "template": "Atendimento não realizado por falta de [DESCREVA SITUAÇÃO]. Cliente [NOME] informado em [DATA/HORA]."
+            "template": "Atendimento não realizado por falta de [ITEM]. Cliente [NOME] informado em [DATA/HORA]."
         }]
     },
 
-    # 13) Falta De Equipamento - Material
+    # 13) Falta De Equipamento - Material (CORRIGIDO)
     {
         "id": "falta_material",
         "titulo": "Falta De Equipamento - Material",
@@ -440,11 +455,11 @@ CATALOGO = [
             "rotulo": "Padrão",
             "descricao": "",
             "regras_obrig": [],
-            "template": "Atendimento não realizado por falta de [DESCREVA SITUAÇÃO]. Cliente [NOME] informado em [DATA/HORA]."
+            "template": "Atendimento não realizado por falta de [ITEM]. Cliente [NOME] informado em [DATA/HORA]."
         }]
     },
 
-    # 14) Falta De Equipamento - Principal
+    # 14) Falta De Equipamento - Principal (CORRIGIDO)
     {
         "id": "falta_principal",
         "titulo": "Falta De Equipamento - Principal",
@@ -460,7 +475,7 @@ CATALOGO = [
             "rotulo": "Padrão",
             "descricao": "",
             "regras_obrig": [],
-            "template": "Atendimento não realizado por falta de [DESCREVA SITUAÇÃO]. Cliente [NOME] informado em [DATA/HORA]."
+            "template": "Atendimento não realizado por falta de [ITEM]. Cliente [NOME] informado em [DATA/HORA]."
         }]
     },
 
@@ -532,7 +547,7 @@ CATALOGO = [
             "rotulo": "Padrão",
             "descricao": "",
             "regras_obrig": [],
-            "template": "Não foi possível realizar o atendimento devido [DESCREVA O PROBLEMA]. Cliente [NOME] foi informado sobre a necessidade de reagendamento."
+            "template": "Não foi possível realizar o atendimento devido [DESCREVER O PROBLEMA]. Cliente [NOME] foi informado sobre a necessidade de reagendamento."
         }]
     },
 
@@ -549,11 +564,11 @@ CATALOGO = [
             "rotulo": "Padrão",
             "descricao": "",
             "regras_obrig": [],
-            "template": "Não foi possível concluir o atendimento devido [DESCREVA O PROBLEMA]. Cliente [NOME] às [DATA/HORA] foi informado sobre a necessidade de reagendamento."
+            "template": "Não foi possível concluir o atendimento devido [DESCREVER O PROBLEMA]. Cliente [NOME] às [DATA/HORA] foi informado sobre a necessidade de reagendamento."
         }]
     },
 
-    # 20) Ocorrência – Sem tempo hábil (Não iniciado)
+    # 20) Ocorrência – Sem tempo hábil (Não iniciado) — CORRIGIDO
     {
         "id": "oc_tecnico_nao_iniciado",
         "titulo": "Ocorrência Com Técnico - Sem Tempo Hábil Para Realizar O Serviço (Não iniciado)",
@@ -566,7 +581,7 @@ CATALOGO = [
             "rotulo": "Padrão",
             "descricao": "",
             "regras_obrig": [],
-            "template": "Motivo: [ERRO DE AGENDAMENTO/ENCAIXE] ou [DEMANDA EXCEDIDA]. Cliente [NOME] informado do reagendamento."
+            "template": "Motivo: [MOTIVO]. Cliente [NOME] informado do reagendamento."
         }]
     },
 
@@ -583,7 +598,7 @@ CATALOGO = [
             "rotulo": "Padrão",
             "descricao": "",
             "regras_obrig": [],
-            "template": "Não foi possível realizar o atendimento devido [DESCREVA O PROBLEMA]. Cliente [NOME] foi informado sobre a necessidade de reagendamento."
+            "template": "Não foi possível realizar o atendimento devido [DESCREVER O PROBLEMA]. Cliente [NOME] foi informado sobre a necessidade de reagendamento."
         }]
     },
 
@@ -617,7 +632,7 @@ CATALOGO = [
             "rotulo": "Padrão",
             "descricao": "",
             "regras_obrig": [],
-            "template": "Não foi possível concluir o atendimento devido [DESCREVA O PROBLEMA]. Cliente [NOME] às [DATA/HORA] foi informado sobre a necessidade de reagendamento."
+            "template": "Não foi possível concluir o atendimento devido [DESCREVER O PROBLEMA]. Cliente [NOME] às [DATA/HORA] foi informado sobre a necessidade de reagendamento."
         }]
     },
 ]
@@ -692,7 +707,6 @@ with col_esq:
         # rótulos explícitos para campos repetidos (quando fizer sentido)
         pretty_label = label
         if label.lower().startswith("data") or label.lower().startswith("hora"):
-            # exemplos de rotulagem mais clara por motivo (ponto opcional)
             if motivo["id"] == "instabilidade_sistema":
                 explicitos = {
                     1: ("Data do fim do atendimento", "Hora do fim do atendimento"),
@@ -732,11 +746,15 @@ with col_esq:
     mascara = build_mask(template, valores)
 
     st.markdown("**3. Texto padrão (Máscara) para incluir na Ordem de Serviço.**")
-    # <<< O atendente pode editar/ acrescenter texto; isso vai para a tabela
+
+    # === NONCE: recria o text_area sempre que motivo/alternativa/campos mudarem ===
+    nonce_source = {"motivo_id": motivo["id"], "alt": alternativa["id"], "campos": valores}
+    mask_nonce = hashlib.md5(json.dumps(nonce_source, sort_keys=True).encode("utf-8")).hexdigest()[:8]
+
     mascara_editada = st.text_area(
         "Máscara gerada",
         value=mascara,
-        key=f"mask_{motivo['id']}_{st.session_state.reset_token}",
+        key=f"mask_{mask_nonce}",     # <- chave muda quando algo muda => widget recriado com value atualizado
         height=140,
         label_visibility="collapsed"
     ).strip()

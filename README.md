@@ -1,4 +1,4 @@
-# Classificação No-show para RT's.
+# Classificação No-show para RT's
 
 Aplicativo em **Streamlit** para padronizar a classificação de **no-show** pelas RT, em atendimentos técnicos.  
 Permite selecionar motivos, preencher informações solicitadas e gerar automaticamente uma **máscara de texto** para registro na Ordem de Serviço (OS).  
@@ -23,33 +23,34 @@ Todos os dados podem ser exportados em **Excel** ou **CSV**.
 - **Exportação**:
   - Excel (usando `openpyxl` ou `xlsxwriter`, se disponíveis).
   - CSV (fallback automático).
-- **Limpeza rápida**:
-  - Botão *"🧹 Nova consulta (limpar tudo)"* limpa todos os campos, incluindo número da OS e máscara editada.
+- **Limpeza**:
+  - **🧹 Limpar campos** – reinicia motivo/inputs/máscara sem apagar a tabela.
+  - **🗑️ Limpar tabela** – apaga apenas os registros já adicionados.
+- **Exemplos restaurados**: todos os 23 motivos têm exemplos visíveis na interface.
 
 ---
 
-## 🖼️ Interface
+## 🔒 Blindagem de Máscaras (auto-fix de tokens)
 
-1. **Número da OS (opcional)** – pode ser deixado em branco.  
-2. **Motivos** – selecione o motivo do no-show.  
-3. **Dados solicitados** – campos variáveis conforme o motivo.  
-   - Exemplos: Nome, Data/Hora, Tipo de erro, Equipamento, etc.  
-   - Campos de múltiplas datas/horas possuem rótulos explícitos (ex.: *Data do contato com o cliente*, *Hora do contato com a central*).  
-4. **Máscara gerada (editável)** – texto pronto para copiar/colocar na OS.  
-5. **Exportação** – adicione registros à tabela e baixe em Excel ou CSV.  
+Desde a versão **v1.3.0**, o app valida e **corrige automaticamente** tokens usados nas máscaras do catálogo.  
+Isso evita que campos preenchidos (azuis) deixem de aparecer no texto final por causa de variações como `[CLIENTE]`, `[NOME CLIENTE]`, `[DESCREVA SITUAÇÃO]`, etc.
 
----
+### Como funciona
+- Na inicialização, o app varre todas as máscaras do `CATALOGO` e:
+  - **Reescreve tokens** não padronizados para um **conjunto canônico** (ex.: `[CLIENTE]` → `[NOME]`, `[DESCREVA SITUAÇÃO]` → `[ITEM]`).
+  - Mantém compatibilidade com pares de data/hora (ex.: `[DATA/HORA 2]`, `[HORA 3]`).
+  - Exibe um **resumo dos ajustes** aplicados na interface.
+- Em tempo de geração, o `build_mask()`:
+  - Preenche tokens com os valores dos inputs.
+  - Remove tokens sem valor (não ficam colchetes vazios no texto).
 
-## 📦 Requisitos
+### Tokens canônicos aceitos
+- Pessoas/entidades: `[NOME]`, `[NOME TÉCNICO]`, `[ESPECIALISTA]`, `[CANAL]`
+- Dados do agendamento: `[DATA]`, `[HORA]`, `[DATA/HORA]`, `[DATA 2]`, `[HORA 2]`, `[DATA/HORA 3]`, …
+- Outras chaves: `[TIPO]`, `[EXPLIQUE A SITUAÇÃO]`, `[EQUIPAMENTO/SISTEMA]`, `[ITEM]`, `[MOTIVO]`, `[NÚMERO ORDEM DE SERVIÇO]`, `[NÚMERO]`
+- Sinônimos comuns (ex.: `[CLIENTE]`, `[NOME CLIENTE]`) são **normalizados automaticamente**.
 
-- Python 3.9+  
-- Dependências principais:
-  - `streamlit`
-  - `pandas`
-  - `openpyxl` (opcional, para Excel)
-  - `xlsxwriter` (opcional, para Excel)
-
-Instale com:
-
-```bash
-pip install -r requirements.txt
+### Como desativar o auto-fix (opcional)
+No arquivo `app_classificador_no_show.py`, comente a linha:
+```python
+CATALOGO = aplicar_auto_fix_catalogo(CATALOGO)

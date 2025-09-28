@@ -48,11 +48,12 @@ def normalize_token(token: str) -> str:
     """
     Normaliza os [TOKENS] do catálogo para chaves de campos.
     Suporta sufixos numéricos: [DATA 2], [HORA 3], [DATA/HORA 2], etc.
+    Retorna uma chave conhecida OU o próprio slug(token) se não houver mapeamento.
     """
     t = slug(token)
 
     # Descrever problema
-    if ("descr" in t) and ("problema" in t):
+    if ("descr" in t) and ("problem" in t):
         return "descreber_o_problema"
 
     # DATA/HORA 1..N
@@ -193,7 +194,7 @@ def campos(*labels):
     return out
 
 # =========================================================
-# Catálogo completo (1–23) com EXEMPLOS RESTAURADOS
+# Catálogo completo (1–23) com exemplos
 # =========================================================
 CATALOGO = [
     # 1
@@ -529,6 +530,101 @@ CATALOGO = [
 ]
 
 # =========================================================
+# AUTO-FIX DE TOKENS DO CATÁLOGO (blindagem)
+# =========================================================
+import copy
+
+# tokens canônicos (para reescrita “visual” nos templates)
+CANON_EQUIV = {
+    "NOME": "nome",
+    "NOME CLIENTE": "nome",
+    "CLIENTE": "nome",
+    "NOME TÉCNICO": "nome_tecnico",
+    "TÉCNICO": "nome_tecnico",
+    "CANAL": "canal",
+    "ESPECIALISTA": "especialista",
+    "TIPO": "tipo_erro",
+    "EXPLIQUE A SITUAÇÃO": "explique",
+    "EQUIPAMENTO/SISTEMA": "equipamento_sistema",
+    "ITEM": "item",
+    "MOTIVO": "motivo",
+    "NÚMERO ORDEM DE SERVIÇO": "numero_os",
+    "NÚMERO": "asm",
+    "DATA": "data",
+    "HORA": "hora",
+    "DATA/HORA": "__DATAHORA__",
+}
+
+def _token_guess(tok_raw: str):
+    """Deduz um token canônico textual para reescrita no template."""
+    t = slug(tok_raw)
+
+    # pares DATA/HORA com índice
+    m = re.match(r"^data_hora(?:_(\d+))?$", t)
+    if m:
+        idx = m.group(1)
+        return "DATA/HORA" if not idx or idx == "1" else f"DATA/HORA {idx}"
+
+    # data/hora isolados com índice
+    m = re.match(r"^(data|hora)(?:_(\d+))?$", t)
+    if m:
+        base, idx = m.group(1), m.group(2)
+        base_up = "DATA" if base == "data" else "HORA"
+        return base_up if not idx or idx == "1" else f"{base_up} {idx}"
+
+    # nomes
+    if "cliente" in t or t == "nome":
+        return "NOME"
+    if "tecnico" in t:
+        return "NOME TÉCNICO"
+
+    # termos comuns
+    if "canal" in t: return "CANAL"
+    if "especial" in t: return "ESPECIALISTA"
+    if "equipamento" in t or "sistema" in t: return "EQUIPAMENTO/SISTEMA"
+    if "motivo" in t: return "MOTIVO"
+    if t.startswith("tipo"): return "TIPO"
+    if "explique" in t or "situacao" in t: return "EXPLIQUE A SITUAÇÃO"
+    if "item" in t: return "ITEM"
+    if "numero_ordem" in t or t == "numero_os": return "NÚMERO ORDEM DE SERVIÇO"
+    if t == "numero": return "NÚMERO"
+
+    # problema / descrever
+    if "descr" in t and "problem" in t:
+        return "DESCREVER O PROBLEMA"
+
+    return None
+
+def aplicar_auto_fix_catalogo(catalogo):
+    cat = copy.deepcopy(catalogo)
+    fixes = []
+    for m in cat:
+        for mask in m.get("mascaras", []):
+            tpl = str(mask.get("template", ""))
+            tokens = re.findall(r"\[([^\]]+)\]", tpl)
+            for tok in tokens:
+                # se normalize_token já resolve, deixa como está
+                if normalize_token(tok) != slug(tok):
+                    continue
+                guess = _token_guess(tok)
+                if not guess:
+                    continue
+                # normaliza sinônimos para um único canônico “visual”
+                if guess in ("NOME CLIENTE", "CLIENTE"):
+                    guess = "NOME"
+                if guess != tok:
+                    tpl_new = tpl.replace(f"[{tok}]", f"[{guess}]")
+                    if tpl_new != tpl:
+                        fixes.append(f'{m["id"]}: [{tok}] → [{guess}]')
+                        tpl = tpl_new
+            mask["template"] = tpl
+    if fixes:
+        st.info("Ajustes automáticos de tokens aplicados:\n- " + "\n- ".join(fixes))
+    return cat
+
+CATALOGO = aplicar_auto_fix_catalogo(CATALOGO)
+
+# =========================================================
 # Estado
 # =========================================================
 if "LINHAS" not in st.session_state:
@@ -594,7 +690,7 @@ with col_esq:
         widget_key = f"inp_{motivo['id']}_{idx}_{eff_name}_{st.session_state.reset_token}"
 
         pretty_label = label
-        # rótulos explicados para casos especiais
+        # rótulos “explicados” para casos especiais
         if label.lower().startswith("data") or label.lower().startswith("hora"):
             if motivo["id"] == "instabilidade_sistema":
                 explicitos = {

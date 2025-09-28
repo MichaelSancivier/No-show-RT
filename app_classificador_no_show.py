@@ -170,13 +170,19 @@ def build_mask(template: str, values: dict) -> str:
     text = re.sub(r"\s{2,}", " ", text)
     return text.strip()
 
-def limpar_tudo():
-    if "LINHAS" in st.session_state:
-        st.session_state.LINHAS = []
+# =========================================================
+# Limpeza (separadas)
+# =========================================================
+def limpar_campos():
+    """Limpa apenas os inputs (motivo, campos e máscara) e força recarregar a tela."""
     st.session_state.reset_token = st.session_state.get("reset_token", 0) + 1
     for k in list(st.session_state.keys()):
         if k.startswith(("inp_", "alt_", "mot_sel_", "os_consulta_", "mask_")):
             del st.session_state[k]
+
+def limpar_tabela():
+    """Limpa apenas a tabela final (LINHAS), sem mexer nos inputs."""
+    st.session_state.LINHAS = []
 
 # =========================================================
 # Utilitário para construir lista de campos
@@ -662,7 +668,7 @@ with col_esq:
     alternativa = motivo["mascaras"][alt_idx]
     obrig_extra = set(alternativa.get("regras_obrig", []))
 
-    # --------- BLOCO DE INPUTS (com chaves únicas e numeradas) ----------
+    # --------- BLOCO DE INPUTS ----------
     valores = {}
     erros = []
     counts_by_name = {}
@@ -679,7 +685,6 @@ with col_esq:
 
         widget_key = f"inp_{motivo['id']}_{idx}_{eff_name}_{st.session_state.reset_token}"
 
-        # rótulos explícitos para campos repetidos (quando fizer sentido)
         pretty_label = label
         if label.lower().startswith("data") or label.lower().startswith("hora"):
             if motivo["id"] == "instabilidade_sistema":
@@ -742,10 +747,12 @@ with col_esq:
         label_visibility="collapsed"
     ).strip()
 
-    c1, c2, c3, c4 = st.columns(4)
+    # --------- Botões ----------
+    c1, c2, c3, c4, c5 = st.columns(5)
     add = c1.button("Adicionar à tabela")
     baixar = c2.button("Baixar Excel")
-    limpar = c4.button("🧹 Nova consulta (limpar tudo)", type="secondary")
+    limpar_campos_btn = c4.button("🧹 Limpar campos")
+    limpar_tabela_btn = c5.button("🗑️ Limpar tabela")
 
     if add:
         if erros:
@@ -817,9 +824,13 @@ with col_esq:
                 )
                 st.warning("Nenhum engine Excel disponível. Exporte em CSV ou inclua `openpyxl`/`xlsxwriter` no requirements.")
 
-    if limpar:
-        limpar_tudo()
+    if limpar_campos_btn:
+        limpar_campos()
         st.rerun()
+
+    if limpar_tabela_btn:
+        limpar_tabela()
+        st.success("Tabela limpa.")
 
 with col_dir:
     st.subheader("O que fazer?")

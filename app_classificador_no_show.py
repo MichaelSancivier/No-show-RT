@@ -308,21 +308,24 @@ CATALOGO = [
     },
 
     # 6) Erro De Agendamento - Cliente desconhecia o agendamento
-    {
-        "id": "erro_cliente_desconhecia",
-        "titulo": "Erro De Agendamento - Cliente desconhecia o agendamento",
-        "acao": "Cancelar agendamento",
-        "quando_usar": "OS foi agendada sem que o cliente tivesse ciência.",
-        "exemplos": [],
-        "campos": campos("Nome Cliente", "Data", "Hora"),
-        "mascaras": [{
-            "id": "padrao",
-            "rotulo": "Padrão",
-            "descricao": "",
-            "regras_obrig": [],
-            "template": "Em contato com o cliente o mesmo informou que desconhecia o agendamento. Nome cliente: [NOME CLIENTE] / Data contato: [DATA/HORA]."
-        }]
-    },
+   {
+    "id": "erro_cliente_desconhecia",
+    "titulo": "Erro De Agendamento - Cliente desconhecia o agendamento",
+    "acao": "Cancelar agendamento",
+    "quando_usar": "OS foi agendada sem que o cliente tivesse ciência.",
+    "exemplos": [
+        "1) Técnico chegou e o cliente disse não ter solicitado nenhum serviço ou foi entrado em contato com o cliente e o mesmo informou que desconhecia o agendamento.​",
+        "2) Realizamos contato com o cliente ele informou que desconhecia o agendamento."
+    ],
+    "campos": campos("Nome Cliente", "Data", "Hora"),
+    "mascaras": [{
+        "id": "padrao",
+        "rotulo": "Padrão",
+        "descricao": "",
+        "regras_obrig": [],
+        "template": "Em contato com o cliente [NOME CLIENTE], o mesmo informou que desconhecia o agendamento. Data contato: [DATA/HORA]."
+    }]
+},
 
     # 7) Erro de Agendamento – Endereço incorreto
     {

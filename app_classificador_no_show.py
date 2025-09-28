@@ -658,6 +658,42 @@ CATALOGO = [
         }]
     },
 ]
+# --- Compat: alinhar templates exatamente à referência fornecida ---
+def aplicar_templates_referencia():
+    ref_templates = {
+        "alteracao_tipo_servico": (
+            "Não foi possível realizar o atendimento devido [DESCREVA O PROBLEMA]. "
+            "Cliente [CLIENTE] foi informado sobre a necessidade de reagendamento."
+        ),
+        "cronograma_substituicao_placa": {  # #5 tem 2 máscaras; ajusto só 'com_os'
+            "com_os": "Realizado atendimento com substituição de placa. Foi realizado a alteração pela OS [NÚMERO ORDEM DE SERVIÇO]."
+        },
+        "erro_cliente_desconhecia": (
+            "Em contato com o cliente o mesmo informou que desconhecia o agendamento. "
+            "Nome cliente: [NOME CLIENTE] / Data contato: [DATA/HORA]."
+        ),
+        # 11–14: texto exato com [DESCREVA SITUAÇÃO]
+        "falta_acessorios_imobilizado": "Atendimento não realizado por falta de [DESCREVA SITUAÇÃO]. Cliente [NOME] informado em [DATA/HORA].",
+        "falta_item_reservado_incompativel": "Atendimento não realizado por falta de [DESCREVA SITUAÇÃO]. Cliente [NOME] informado em [DATA/HORA].",
+        "falta_material": "Atendimento não realizado por falta de [DESCREVA SITUAÇÃO]. Cliente [NOME] informado em [DATA/HORA].",
+        "falta_principal": "Atendimento não realizado por falta de [DESCREVA SITUAÇÃO]. Cliente [NOME] informado em [DATA/HORA].",
+        # 20: original com dois tokens
+        "oc_tecnico_nao_iniciado": (
+            "Motivo: [ERRO DE AGENDAMENTO/ENCAIXE] ou [DEMANDA EXCEDIDA]. "
+            "Cliente [NOME] informado do reagendamento."
+        ),
+    }
+
+    for m in CATALOGO:
+        mid = m["id"]
+        if mid == "cronograma_substituicao_placa":
+            for mask in m["mascaras"]:
+                if mask["id"] == "com_os":
+                    mask["template"] = ref_templates[mid]["com_os"]
+        elif mid in ref_templates:
+            m["mascaras"][0]["template"] = ref_templates[mid]
+
+aplicar_templates_referencia()
 
 # =========================================================
 # Estado

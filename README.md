@@ -4,6 +4,8 @@ Aplicativo em **Streamlit** para padronizar a classificação de **no-show** pel
 Permite selecionar motivos, preencher informações solicitadas e gerar automaticamente uma **máscara de texto** para registro na Ordem de Serviço (OS).  
 Todos os dados podem ser exportados em **Excel** ou **CSV**.
 
+👉 **Acesse o app aqui:** [https://no-show-rt-09.streamlit.app/](https://no-show-rt-09.streamlit.app/)
+
 ---
 
 ## ✨ Funcionalidades
